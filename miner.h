@@ -215,6 +215,7 @@ extern int longpoll_thr_id;
 extern int stratum_thr_id;
 extern struct work_restart *work_restart;
 extern bool jsonrpc_2;
+extern char rpc2_id[64];
 
 #define JSON_RPC_LONGPOLL	(1 << 0)
 #define JSON_RPC_QUIET_404	(1 << 1)
@@ -230,6 +231,8 @@ extern int timeval_subtract(struct timeval *result, struct timeval *x,
 	struct timeval *y);
 extern bool fulltest(const uint32_t *hash, const uint32_t *target);
 extern void diff_to_target(uint32_t *target, double diff);
+extern bool rpc2_getfullscratchpad_decode(const json_t *val);
+
 
 struct work {
     uint32_t data[32];
@@ -285,6 +288,8 @@ void stratum_disconnect(struct stratum_ctx *sctx);
 bool stratum_subscribe(struct stratum_ctx *sctx);
 bool stratum_authorize(struct stratum_ctx *sctx, const char *user, const char *pass);
 bool stratum_handle_method(struct stratum_ctx *sctx, const char *s);
+
+extern bool stratum_getscratchpad(struct stratum_ctx *sctx);
 
 extern bool rpc2_job_decode(const json_t *job, struct work *work);
 extern bool rpc2_login_decode(const json_t *val);

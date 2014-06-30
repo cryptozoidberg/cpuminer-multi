@@ -160,7 +160,7 @@ int longpoll_thr_id = -1;
 int stratum_thr_id = -1;
 struct work_restart *work_restart = NULL;
 static struct stratum_ctx stratum;
-static char rpc2_id[64] = "";
+char rpc2_id[64] = "";
 static char *rpc2_blob = NULL;
 static int rpc2_bloblen = 0;
 static uint32_t rpc2_target = 0;
@@ -610,7 +610,7 @@ bool rpc2_getfullscratchpad_decode(const json_t *val) {
 
     json_t *res = json_object_get(val, "result");
     if(!res) {
-        applog(LOG_ERR, "JSON invalid result");
+        applog(LOG_ERR, "JSON invalid result in rpc2_getfullscratchpad_decode");
         goto err_out;
     }
 
@@ -854,6 +854,8 @@ static bool get_upstream_work(CURL *curl, struct work *work) {
     return rc;
 }
 
+
+
 static bool rpc2_login(CURL *curl) {
     if(!jsonrpc_2) {
         return false;
@@ -880,62 +882,26 @@ static bool rpc2_login(CURL *curl) {
 
     if(!result) goto end;
 
+
+
+    applog(LOG_INFO, "Using normal job parsing scenario");
+
     json_t *job = json_object_get(result, "job");
 
     if(!rpc2_job_decode(job, &g_work)) {
-        goto end;
+      goto end;
     }
 
     if (opt_debug && rc) {
-        timeval_subtract(&diff, &tv_end, &tv_start);
-        applog(LOG_DEBUG, "DEBUG: authenticated in %d ms",
-                diff.tv_sec * 1000 + diff.tv_usec / 1000);
+      timeval_subtract(&diff, &tv_end, &tv_start);
+      applog(LOG_DEBUG, "DEBUG: authenticated in %d ms",
+        diff.tv_sec * 1000 + diff.tv_usec / 1000);
     }
 
     json_decref(val);
 
     end:
     return rc;
-}
-
-static bool rpc2_getscratchpad(CURL *curl) {
-  if(!jsonrpc_2) {
-    return false;
-  }
-  json_t *val;
-  bool rc;
-  struct timeval tv_start, tv_end, diff;
-  char s[JSON_BUF_LEN];
-
-  snprintf(s, JSON_BUF_LEN, "{\"method\": \"getfullscratchpad\", \"params\": {\"id\": \"%s\", \"agent\": \"cpuminer-multi/0.1\"}, \"id\": 1}", rpc2_id);
-
-
-  applog(LOG_DEBUG, "Getting full scratchpad....");
-  gettimeofday(&tv_start, NULL );
-  val = json_rpc_call(curl, rpc_url, rpc_userpass, s, NULL, 0);
-  gettimeofday(&tv_end, NULL );
-
-  if (!val)
-  {
-    applog(LOG_ERR, "Getting full scratchpad FAILED");
-    goto end;
-  }
-  applog(LOG_DEBUG, "Getting full scratchpad: OK");
-
-
-  //    applog(LOG_DEBUG, "JSON value: %s", json_dumps(val, 0));
-  rc = rpc2_getfullscratchpad_decode(val);  
-
-  if (opt_debug && rc) {
-    timeval_subtract(&diff, &tv_end, &tv_start);
-    applog(LOG_DEBUG, "DEBUG: authenticated in %d ms",
-      diff.tv_sec * 1000 + diff.tv_usec / 1000);
-  }
-
-  json_decref(val);
-
-end:
-  return rc;
 }
 
 
@@ -1029,32 +995,32 @@ static bool workio_login(CURL *curl) {
 }
 
 
-static bool workio_getscratchpad(CURL *curl) {
-  
-  int failures = 0;
-
-  //not sure that we need this lock for getscratchpad
-  pthread_mutex_lock(&rpc2_getscratchpad_lock);
-
-
-  while (!rpc2_getscratchpad(curl)) {
-    if (unlikely((opt_retries >= 0) && (++failures > opt_retries))) {
-      applog(LOG_ERR, "...terminating workio thread");
-      pthread_mutex_unlock(&rpc2_getscratchpad_lock);
-      return false;
-    }
-
-    /* pause, then restart work-request loop */
-    applog(LOG_ERR, "...retry after %d seconds", opt_fail_pause);
-    sleep(opt_fail_pause);
-    pthread_mutex_unlock(&rpc2_getscratchpad_lock);
-    pthread_mutex_lock(&rpc2_getscratchpad_lock);
-  }
-  pthread_mutex_unlock(&rpc2_getscratchpad_lock);
-
-  return true;
-}
-
+// static bool workio_getscratchpad(CURL *curl) {
+//   
+//   int failures = 0;
+// 
+//   //not sure that we need this lock for getscratchpad
+//   pthread_mutex_lock(&rpc2_getscratchpad_lock);
+// 
+// 
+//   while (!rpc2_getscratchpad(curl)) {
+//     if (unlikely((opt_retries >= 0) && (++failures > opt_retries))) {
+//       applog(LOG_ERR, "...terminating workio thread");
+//       pthread_mutex_unlock(&rpc2_getscratchpad_lock);
+//       return false;
+//     }
+// 
+//     /* pause, then restart work-request loop */
+//     applog(LOG_ERR, "...retry after %d seconds", opt_fail_pause);
+//     sleep(opt_fail_pause);
+//     pthread_mutex_unlock(&rpc2_getscratchpad_lock);
+//     pthread_mutex_lock(&rpc2_getscratchpad_lock);
+//   }
+//   pthread_mutex_unlock(&rpc2_getscratchpad_lock);
+// 
+//   return true;
+// }
+// 
 
 
 
@@ -1070,12 +1036,8 @@ static void *workio_thread(void *userdata) {
     }
 
     if(!have_stratum) {
-        ok = workio_login(curl);
-    }
-
-
-    if(opt_algo == ALGO_WILD_KECCAK) {
-      ok = workio_getscratchpad(curl);
+      applog(LOG_INFO, "sending login...");
+      ok = workio_login(curl);
     }
 
 
@@ -1630,6 +1592,16 @@ static void *stratum_thread(void *userdata) {
             }
         }
 
+        if(opt_algo == ALGO_WILD_KECCAK && !scratchpad_size)
+        {
+          if(!stratum_getscratchpad(&stratum))
+          {
+            stratum_disconnect(&stratum);
+            applog(LOG_ERR, "...retry after %d seconds", opt_fail_pause);
+            sleep(opt_fail_pause);
+          }
+        }
+
         if (jsonrpc_2) {
             if (stratum.work.job_id
                     && (!g_work_time
@@ -1731,8 +1703,6 @@ static void show_usage_and_exit(int status) {
 static void parse_arg(int key, char *arg) {
     char *p;
     int v, i;
-
-    fprintf(stderr, "parsing \n");
 
     switch (key) {
     case 'a':

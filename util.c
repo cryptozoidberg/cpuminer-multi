@@ -497,7 +497,7 @@ size_t hex2bin_len(unsigned char *p, const char *hexstr, size_t len)
   while (*hexstr && len) {
     if (!hexstr[1]) {
       applog(LOG_ERR, "hex2bin str truncated");
-      return false;
+      return 0;
     }
     hex_byte[0] = hexstr[0];
     hex_byte[1] = hexstr[1];
@@ -512,7 +512,7 @@ size_t hex2bin_len(unsigned char *p, const char *hexstr, size_t len)
     len--;
   }
 
-  return (len == 0 && *hexstr == 0) ? count : 0;
+  return (/*len == 0 &&*/ *hexstr == 0) ? count : 0;
 }
 
 /* Subtract the `struct timeval' values X and Y,
@@ -738,7 +738,19 @@ char *stratum_recv_line(struct stratum_ctx *sctx)
 
 out:
 	if (sret && opt_protocol)
-		applog(LOG_DEBUG, "< %s", sret);
+  {
+    if(len > 2000)
+    {
+      char croppedres[1000] = {0};
+      strncpy(croppedres, sret, 997);
+      croppedres[996] = croppedres[997] = croppedres[998] = '.';
+      applog(LOG_DEBUG, "< %s", croppedres);
+    }else
+    {
+      applog(LOG_DEBUG, "< %s", sret);
+    }
+    
+  }
 	return sret;
 }
 
@@ -955,6 +967,60 @@ out:
 
 	return ret;
 }
+
+bool stratum_getscratchpad(struct stratum_ctx *sctx) {
+ 
+  json_t *val = NULL, *res_val, *err_val;
+  char *s, *sret;
+  json_error_t err;
+  //bool ret = false;
+
+  s = malloc(1000);
+  sprintf(s, "{\"method\": \"getfullscratchpad\", \"params\": {\"id\": \"%s\", \"agent\": \"cpuminer-multi/0.1\"}, \"id\": 1}", rpc2_id);
+  
+  applog(LOG_INFO, "Getting full scratchpad....");
+  if (!stratum_send_line(sctx, s))
+    goto out;
+
+  while (1) {
+    sret = stratum_recv_line(sctx);
+    if (!sret)
+      goto out;
+    if (!stratum_handle_method(sctx, sret))
+      break;
+    free(sret);
+  }
+  applog(LOG_DEBUG, "Getting full scratchpad received line");
+
+  val = JSON_LOADS(sret, &err);
+  free(sret);
+  if (!val) {
+    applog(LOG_ERR, "JSON decode rpc2_getscratchpad response failed(%d): %s", err.line, err.text);
+    goto out;
+  }
+
+  applog(LOG_DEBUG, "Getting full scratchpad parsed line");
+
+  //res_val = json_object_get(val, "result");
+  //err_val = json_object_get(val, "error");
+
+  //if (!res_val || json_is_false(res_val) || (err_val && !json_is_null(err_val)))  
+  //{
+  //    applog(LOG_ERR, "Stratum rpc2_getscratchpad failed");
+  //    goto out;
+  //}
+
+  bool ret = rpc2_getfullscratchpad_decode(val);  
+
+
+out:
+  free(s);
+  if (val)
+    json_decref(val);
+
+  return ret;
+}
+
 
 bool stratum_authorize(struct stratum_ctx *sctx, const char *user, const char *pass)
 {
