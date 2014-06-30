@@ -108,7 +108,8 @@ enum mining_algo {
     ALGO_SHAVITE3,    /* Shavite3 */
     ALGO_BLAKE,       /* Blake */
     ALGO_X11,         /* X11 */
-    ALGO_CRYPTONIGHT, /* CryptoNight */
+    ALGO_WILD_KECCAK, /* Boolberry */
+    ALGO_CRYPTONIGHT, /* CryptoNight */    
 };
 
 static const char *algo_names[] = {
@@ -121,6 +122,7 @@ static const char *algo_names[] = {
     [ALGO_SHAVITE3] =    "shavite3",
     [ALGO_BLAKE] =       "blake",
     [ALGO_X11] =         "x11",
+    [ALGO_WILD_KECCAK] = "wildkeccak",
     [ALGO_CRYPTONIGHT] = "cryptonight",
 };
 
@@ -164,10 +166,24 @@ static int rpc2_bloblen = 0;
 static uint32_t rpc2_target = 0;
 static char *rpc2_job_id = NULL;
 
+#define WILD_KECCAK_SCRATCHPAD_BUFFSIZE  1000000000  //100MB
+struct scratchpad_hi
+{
+  unsigned char prevhash[32];
+  uint64_t height;
+};
+
+static uint64_t* pscratchpad_buff = NULL;
+static uint64_t  scratchpad_size = 0;
+struct scratchpad_hi current_scratchpad_hi = {0};
+
+ 
+
 pthread_mutex_t applog_lock;
 static pthread_mutex_t stats_lock;
 static pthread_mutex_t rpc2_job_lock;
 static pthread_mutex_t rpc2_login_lock;
+static pthread_mutex_t rpc2_getscratchpad_lock;
 
 static unsigned long accepted_count = 0L;
 static unsigned long rejected_count = 0L;
@@ -199,6 +215,7 @@ Options:\n\
                           blake        Blake\n\
                           x11          X11\n\
                           cryptonight  CryptoNight\n\
+                          wildkeccak   WildKeccak\n\
   -o, --url=URL         URL of mining server\n\
   -O, --userpass=U:P    username:password pair for mining server\n\
   -u, --user=USERNAME   username for mining server\n\
@@ -481,8 +498,115 @@ static bool work_decode(const json_t *val, struct work *work) {
 }
 
 bool rpc2_login_decode(const json_t *val) {
+  const char *id;
+  const char *s;
+
+  json_t *res = json_object_get(val, "result");
+  if(!res) {
+    applog(LOG_ERR, "JSON invalid result");
+    goto err_out;
+  }
+
+  json_t *tmp;
+  tmp = json_object_get(res, "id");
+  if(!tmp) {
+    applog(LOG_ERR, "JSON inval id");
+    goto err_out;
+  }
+  id = json_string_value(tmp);
+  if(!id) {
+    applog(LOG_ERR, "JSON id is not a string");
+    goto err_out;
+  }
+
+  memcpy(&rpc2_id, id, 64);
+
+  if(opt_debug)
+    applog(LOG_DEBUG, "Auth id: %s", id);
+
+  tmp = json_object_get(res, "status");
+  if(!tmp) {
+    applog(LOG_ERR, "JSON inval status");
+    goto err_out;
+  }
+  s = json_string_value(tmp);
+  if(!s) {
+    applog(LOG_ERR, "JSON status is not a string");
+    goto err_out;
+  }
+  if(strcmp(s, "OK")) {
+    applog(LOG_ERR, "JSON returned status \"%s\"", s);
+    return false;
+  }
+
+  return true;
+
+err_out: return false;
+}
+
+const char* get_json_string_param(const json_t *val, const char* param_name)
+{
+  json_t *tmp;
+  tmp = json_object_get(val, param_name);
+  if(!tmp) {
+    return NULL;
+  }
+  return json_string_value(tmp);
+}
+
+
+bool parse_height_info(const json_t *hi_section, struct scratchpad_hi* phi)
+{
+  if(!phi || !hi_section)
+  {
+    applog(LOG_ERR, "parse_height_info: wrong params");
+    goto err_out;
+  }
+  json_t *height = json_object_get(hi_section, "height");
+  if(!height) {
+    applog(LOG_ERR, "JSON inval hi, no height param");
+    goto err_out;
+  }
+
+  if(!json_is_integer(height))
+  {
+    applog(LOG_ERR, "JSON inval hi: height is not integer ");
+    goto err_out;
+  }
+
+  uint64_t hi_h = (uint64_t)json_integer_value(height);
+  if(!hi_h)
+  {
+    applog(LOG_ERR, "JSON inval hi: height is 0");
+    goto err_out;
+  }
+
+  const char* block_id = get_json_string_param(hi_section, "block_id");
+  if(!block_id) {
+    applog(LOG_ERR, "JSON inval hi: block_id not found ");
+    goto err_out;
+  }
+
+  unsigned char prevhash[32] = {};
+  size_t len = hex2bin_len(prevhash, block_id, 32);
+  if(len != 32)
+  {
+    applog(LOG_ERR, "JSON inval hi: block_id wrong len %d", len);
+    goto err_out;
+  }
+
+  phi->height = hi_h;
+  memcpy(phi->prevhash, prevhash, 32);
+
+  return true;
+err_out: 
+  return false;
+}
+
+bool rpc2_getfullscratchpad_decode(const json_t *val) {
     const char *id;
-    const char *s;
+    //const char *s;
+    const char *status;
 
     json_t *res = json_object_get(val, "result");
     if(!res) {
@@ -490,38 +614,56 @@ bool rpc2_login_decode(const json_t *val) {
         goto err_out;
     }
 
-    json_t *tmp;
-    tmp = json_object_get(res, "id");
-    if(!tmp) {
-        applog(LOG_ERR, "JSON inval id");
-        goto err_out;
+    //check status    
+    status = get_json_string_param(res, "status");
+    if (!status ) {
+      applog(LOG_ERR, "JSON status is not a string");
+      goto err_out;
     }
-    id = json_string_value(tmp);
-    if(!id) {
-        applog(LOG_ERR, "JSON id is not a string");
+
+    if(strcmp(status, "OK")) {
+      applog(LOG_ERR, "JSON returned status \"%s\"", status);
+      goto err_out;
+    }
+
+    //parse scratchpad
+    const char* scratch_hex = get_json_string_param(res, "scratchpad_hex");
+    if (!scratch_hex) {
+      applog(LOG_ERR, "JSON scratch_hex is not a string");
+      goto err_out;
+    }
+
+    size_t len = hex2bin_len((unsigned char*)pscratchpad_buff, scratch_hex, WILD_KECCAK_SCRATCHPAD_BUFFSIZE);
+    if (!len)
+    {
+      applog(LOG_ERR, "JSON scratch_hex is not valid hex");
+      goto err_out;
+    }
+
+    if (len%8 || len%32)
+    {
+      applog(LOG_ERR, "JSON scratch_hex is not valid size=%d bytes", len);
+      goto err_out;
+    }
+
+    applog(LOG_INFO, "Fetched scratchpad size %d bytes", len);
+    scratchpad_size = len/8;
+
+    
+    //parse hi
+    json_t *hi = json_object_get(res, "hi");
+    if(!hi) {
+        applog(LOG_ERR, "JSON inval hi");
         goto err_out;
     }
 
-    memcpy(&rpc2_id, id, 64);
-
-    if(opt_debug)
-        applog(LOG_DEBUG, "Auth id: %s", id);
-
-    tmp = json_object_get(res, "status");
-    if(!tmp) {
-        applog(LOG_ERR, "JSON inval status");
-        goto err_out;
-    }
-    s = json_string_value(tmp);
-    if(!s) {
-        applog(LOG_ERR, "JSON status is not a string");
-        goto err_out;
-    }
-    if(strcmp(s, "OK")) {
-        applog(LOG_ERR, "JSON returned status \"%s\"", s);
-        return false;
+    if(!parse_height_info(hi, &current_scratchpad_hi))
+    {
+      applog(LOG_ERR, "JSON inval hi, failed to parse");
+      goto err_out;
     }
 
+    applog(LOG_INFO, "Fetched scratchpad size %d bytes", len);
     return true;
 
     err_out: return false;
@@ -756,6 +898,49 @@ static bool rpc2_login(CURL *curl) {
     return rc;
 }
 
+static bool rpc2_getscratchpad(CURL *curl) {
+  if(!jsonrpc_2) {
+    return false;
+  }
+  json_t *val;
+  bool rc;
+  struct timeval tv_start, tv_end, diff;
+  char s[JSON_BUF_LEN];
+
+  snprintf(s, JSON_BUF_LEN, "{\"method\": \"getfullscratchpad\", \"params\": {\"id\": \"%s\", \"agent\": \"cpuminer-multi/0.1\"}, \"id\": 1}", rpc2_id);
+
+
+  applog(LOG_DEBUG, "Getting full scratchpad....");
+  gettimeofday(&tv_start, NULL );
+  val = json_rpc_call(curl, rpc_url, rpc_userpass, s, NULL, 0);
+  gettimeofday(&tv_end, NULL );
+
+  if (!val)
+  {
+    applog(LOG_ERR, "Getting full scratchpad FAILED");
+    goto end;
+  }
+  applog(LOG_DEBUG, "Getting full scratchpad: OK");
+
+
+  //    applog(LOG_DEBUG, "JSON value: %s", json_dumps(val, 0));
+  rc = rpc2_getfullscratchpad_decode(val);  
+
+  if (opt_debug && rc) {
+    timeval_subtract(&diff, &tv_end, &tv_start);
+    applog(LOG_DEBUG, "DEBUG: authenticated in %d ms",
+      diff.tv_sec * 1000 + diff.tv_usec / 1000);
+  }
+
+  json_decref(val);
+
+end:
+  return rc;
+}
+
+
+
+
 static void workio_cmd_free(struct workio_cmd *wc) {
     if (!wc)
         return;
@@ -843,6 +1028,36 @@ static bool workio_login(CURL *curl) {
     return true;
 }
 
+
+static bool workio_getscratchpad(CURL *curl) {
+  
+  int failures = 0;
+
+  //not sure that we need this lock for getscratchpad
+  pthread_mutex_lock(&rpc2_getscratchpad_lock);
+
+
+  while (!rpc2_getscratchpad(curl)) {
+    if (unlikely((opt_retries >= 0) && (++failures > opt_retries))) {
+      applog(LOG_ERR, "...terminating workio thread");
+      pthread_mutex_unlock(&rpc2_getscratchpad_lock);
+      return false;
+    }
+
+    /* pause, then restart work-request loop */
+    applog(LOG_ERR, "...retry after %d seconds", opt_fail_pause);
+    sleep(opt_fail_pause);
+    pthread_mutex_unlock(&rpc2_getscratchpad_lock);
+    pthread_mutex_lock(&rpc2_getscratchpad_lock);
+  }
+  pthread_mutex_unlock(&rpc2_getscratchpad_lock);
+
+  return true;
+}
+
+
+
+
 static void *workio_thread(void *userdata) {
     struct thr_info *mythr = userdata;
     CURL *curl;
@@ -857,6 +1072,13 @@ static void *workio_thread(void *userdata) {
     if(!have_stratum) {
         ok = workio_login(curl);
     }
+
+
+    if(opt_algo == ALGO_WILD_KECCAK) {
+      ok = workio_getscratchpad(curl);
+    }
+
+
 
     while (ok) {
         struct workio_cmd *wc;
@@ -1510,8 +1732,11 @@ static void parse_arg(int key, char *arg) {
     char *p;
     int v, i;
 
+    fprintf(stderr, "parsing \n");
+
     switch (key) {
     case 'a':
+        fprintf(stderr, "parsing algo: %s\n", arg);
         for (i = 0; i < ARRAY_SIZE(algo_names); i++) {
             if (algo_names[i] && !strcmp(arg, algo_names[i])) {
                 opt_algo = i;
@@ -1519,7 +1744,10 @@ static void parse_arg(int key, char *arg) {
             }
         }
         if (i == ARRAY_SIZE(algo_names))
-            show_usage_and_exit(1);
+        {
+          printf("algo name not found: %s", arg);
+          show_usage_and_exit(1);
+        }
         break;
     case 'B':
         opt_background = true;
@@ -1772,6 +2000,15 @@ int main(int argc, char *argv[]) {
     } else if(opt_algo == ALGO_CRYPTONIGHT) {
         jsonrpc_2 = true;
         applog(LOG_INFO, "Using JSON-RPC 2.0");
+    } else if(opt_algo == ALGO_WILD_KECCAK) {
+      jsonrpc_2 = true;
+      applog(LOG_INFO, "Using JSON-RPC 2.0");
+      pscratchpad_buff = malloc(WILD_KECCAK_SCRATCHPAD_BUFFSIZE);
+      if(!pscratchpad_buff)
+      {
+        applog(LOG_ERR, "scratchpad allocation failed");
+        return 1;
+      }
     }
 
 

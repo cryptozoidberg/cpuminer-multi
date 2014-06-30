@@ -486,6 +486,35 @@ bool hex2bin(unsigned char *p, const char *hexstr, size_t len)
 	return (len == 0 && *hexstr == 0) ? true : false;
 }
 
+size_t hex2bin_len(unsigned char *p, const char *hexstr, size_t len)
+{
+  char hex_byte[3];
+  char *ep;
+  size_t count = 0;
+
+  hex_byte[2] = '\0';
+  
+  while (*hexstr && len) {
+    if (!hexstr[1]) {
+      applog(LOG_ERR, "hex2bin str truncated");
+      return false;
+    }
+    hex_byte[0] = hexstr[0];
+    hex_byte[1] = hexstr[1];
+    *p = (unsigned char) strtol(hex_byte, &ep, 16);
+    if (*ep) {
+      applog(LOG_ERR, "hex2bin failed on '%s'", hex_byte);
+      return 0;
+    }
+    count++;
+    p++;
+    hexstr += 2;
+    len--;
+  }
+
+  return (len == 0 && *hexstr == 0) ? count : 0;
+}
+
 /* Subtract the `struct timeval' values X and Y,
    storing the result in RESULT.
    Return 1 if the difference is negative, otherwise 0.  */
