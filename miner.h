@@ -186,6 +186,14 @@ extern void cryptonight_hash(void* output, const void* input, size_t input_len);
 extern int scanhash_cryptonight(int thr_id, uint32_t *pdata, const uint32_t *ptarget,
 		uint32_t max_nonce, unsigned long *hashes_done);
 
+
+
+extern void wild_keccak_hash_dbl_use_global_scratch(const uint8_t *in, size_t inlen, uint8_t *md);
+
+extern int scanhash_wildkeccak(int thr_id, uint32_t *pdata, const uint32_t *ptarget,
+                                uint32_t max_nonce, unsigned long *hashes_done);
+
+
 struct thr_info {
 	int		id;
 	pthread_t	pth;
@@ -216,6 +224,9 @@ extern int stratum_thr_id;
 extern struct work_restart *work_restart;
 extern bool jsonrpc_2;
 extern char rpc2_id[64];
+
+extern uint64_t* pscratchpad_buff;
+extern uint64_t  scratchpad_size;
 
 #define JSON_RPC_LONGPOLL	(1 << 0)
 #define JSON_RPC_QUIET_404	(1 << 1)
