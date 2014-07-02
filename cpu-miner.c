@@ -1485,7 +1485,7 @@ static void *miner_thread(void *userdata) {
         {
           if (memcmp(((uint8_t*) work.data) + 1 + 8, ((uint8_t*) g_work.data) + 1 + 8, 80-9)) 
           {
-            applog(LOG_ERR, "work retrieval failed, exiting mining thread %d", mythr->id);
+            applog(LOG_ERR, "reloading job");
             work_free(&work);
             work_copy(&work, &g_work);
             nonceptr = (uint32_t*) (((char*)work.data) + 1);
