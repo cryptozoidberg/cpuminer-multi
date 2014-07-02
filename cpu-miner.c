@@ -163,19 +163,16 @@ static struct stratum_ctx stratum;
 char rpc2_id[64] = "";
 static char *rpc2_blob = NULL;
 static int rpc2_bloblen = 0;
-static uint64_t rpc2_target = 0;
+static uint32_t rpc2_target = 0;
 static char *rpc2_job_id = NULL;
 
-#define WILD_KECCAK_SCRATCHPAD_BUFFSIZE  1000000000  //100MB
-struct scratchpad_hi
-{
-  unsigned char prevhash[32];
-  uint64_t height;
-};
 
+volatile bool stratum_have_work = false;
 uint64_t* pscratchpad_buff = NULL;
-uint64_t  scratchpad_size = 0;
+volatile uint64_t  scratchpad_size = 0;
 struct scratchpad_hi current_scratchpad_hi = {0};
+struct addendums_array add_arr[WILD_KECCAK_ADDENDUMS_ARRAY_SIZE] = {0};
+
 
  
 
@@ -394,7 +391,211 @@ static bool jobj_binary(const json_t *obj, const char *key, void *buf,
     return true;
 }
 
-bool rpc2_job_decode(const json_t *job, struct work *work) {
+
+const char* get_json_string_param(const json_t *val, const char* param_name)
+{
+  json_t *tmp;
+  tmp = json_object_get(val, param_name);
+  if(!tmp) {
+    return NULL;
+  }
+  return json_string_value(tmp);
+}
+
+
+bool parse_height_info(const json_t *hi_section, struct scratchpad_hi* phi)
+{
+  if(!phi || !hi_section)
+  {
+    applog(LOG_ERR, "parse_height_info: wrong params");
+    goto err_out;
+  }
+  json_t *height = json_object_get(hi_section, "height");
+  if(!height) {
+    applog(LOG_ERR, "JSON inval hi, no height param");
+    goto err_out;
+  }
+
+  if(!json_is_integer(height))
+  {
+    applog(LOG_ERR, "JSON inval hi: height is not integer ");
+    goto err_out;
+  }
+
+  uint64_t hi_h = (uint64_t)json_integer_value(height);
+  if(!hi_h)
+  {
+    applog(LOG_ERR, "JSON inval hi: height is 0");
+    goto err_out;
+  }
+
+  const char* block_id = get_json_string_param(hi_section, "block_id");
+  if(!block_id) {
+    applog(LOG_ERR, "JSON inval hi: block_id not found ");
+    goto err_out;
+  }
+
+  unsigned char prevhash[32] = {};
+  size_t len = hex2bin_len(prevhash, block_id, 32);
+  if(len != 32)
+  {
+    applog(LOG_ERR, "JSON inval hi: block_id wrong len %d", len);
+    goto err_out;
+  }
+
+  phi->height = hi_h;
+  memcpy(phi->prevhash, prevhash, 32);
+
+  return true;
+err_out: 
+  return false;
+}
+
+
+
+bool patch_scratchpad_with_addendum(uint64_t global_add_startpoint, uint64_t* padd_buff, size_t count)
+{
+  for(int i = 0; i < count; i += 4)
+  {
+    uint64_t global_offset = (padd_buff[i]%global_add_startpoint)*4;
+    for(int j = 0; j != 4; j++)
+      pscratchpad_buff[global_offset + j] ^= padd_buff[i + j];
+  }
+  return true;
+}
+
+bool apply_addendum(uint64_t* padd_buff, size_t count)
+{
+  if(WILD_KECCAK_SCRATCHPAD_BUFFSIZE <= (scratchpad_size+ count)*8 )
+  {
+    applog(LOG_ERR, "!!!!!!! WILD_KECCAK_SCRATCHPAD_BUFFSIZE is overflowed !!!!!!!! please increase this constant! ");
+    return false;
+  }
+
+  if(!patch_scratchpad_with_addendum(scratchpad_size, padd_buff, count) )
+  {
+    applog(LOG_ERR, "patch_scratchpad_with_addendum is broken, reseting scratchpad");
+    current_scratchpad_hi.height = 0;
+    scratchpad_size = 0;
+    return false;
+  }
+  for(int k = 0; k != count; k++)
+    pscratchpad_buff[scratchpad_size+k] =   padd_buff[k];
+
+  scratchpad_size += count;
+  return true;
+}
+
+bool addendum_decode(const json_t *addm)
+{
+    struct scratchpad_hi hi = {0};
+    unsigned char prevhash[32] = {0};
+
+    json_t* hi_section = json_object_get(addm, "hi");
+    if (!hi_section)
+    {
+      //applog(LOG_ERR, "JSON addms field not found");
+      //return false;
+      return true;
+    }
+
+    if(!parse_height_info(hi_section, &hi))
+    {
+        return false;
+    }
+
+    const char* prev_id_str = get_json_string_param(addm, "prev_id");
+    if(!prev_id_str)
+    {
+      applog(LOG_ERR, "JSON prev_id is not a string");
+      return false;
+    }
+    if(!hex2bin(prevhash, prev_id_str, 32))
+    {
+      applog(LOG_ERR, "JSON prev_id is not valid hex string");
+      return false;
+    }
+
+
+    if(current_scratchpad_hi.height != hi.height -1)
+    {
+      //TODO: ADD SPLIT HANDLING HERE
+      applog(LOG_ERR, "JSON height in addendum-1 (%lld-1) missmatched with current_scratchpad_hi.height(%lld)", hi.height, current_scratchpad_hi.height);
+      return false;
+    }
+
+    if(memcmp(prevhash, current_scratchpad_hi.prevhash, 32))
+    {
+      //TODO: ADD SPLIT HANDLING HERE
+      applog(LOG_ERR, "JSON prev_id in addendum missmatched with current_scratchpad_hi.prevhash");
+      return false;
+    }
+
+    const char* addm_hexstr = get_json_string_param(addm, "addm");
+    if(!addm_hexstr)
+    {
+      applog(LOG_ERR, "JSON prev_id in addendum missmatched with current_scratchpad_hi.prevhash");
+      return false;
+    }
+    size_t add_len = strlen(addm_hexstr);
+    if(add_len%64)
+    {
+      applog(LOG_ERR, "JSON wrong addm hex str len");
+      return false;
+    }
+    uint64_t* padd_buff = malloc(add_len/2);
+    if(!hex2bin((unsigned char*)padd_buff, addm_hexstr, add_len/2))
+    {
+      applog(LOG_ERR, "JSON wrong addm hex str len");
+      return false;
+    }
+
+    if(!apply_addendum(padd_buff, add_len/16))
+    {
+      applog(LOG_ERR, "JSON Failed to apply_addendum!");
+      return false;
+    }
+    memcpy(&current_scratchpad_hi, &hi, sizeof(struct scratchpad_hi));
+
+    applog(LOG_INFO, "Addendum applied: %lld blocks added", add_len/64);
+    return true;
+}
+
+bool addendums_decode(const json_t *job)
+{
+    json_t* paddms = json_object_get(job, "addms");
+    if (!paddms)
+    {
+      //applog(LOG_ERR, "JSON addms field not found");
+      //return false;
+      return true;
+    }
+
+    if(!json_is_array(paddms))
+    {
+      applog(LOG_ERR, "JSON addms field is not array");
+      return false;
+    }
+
+    unsigned int add_sz = json_array_size(paddms);
+    for (int i = 0; i < add_sz; i++) 
+    {
+      const char *notify;
+      json_t *addm = json_array_get(paddms, i);
+      if (!addm ) 
+      {
+        applog(LOG_ERR, "Internal error: failed to get addm");
+        return false;
+      }
+      if(!addendum_decode(addm))
+        return false;
+    }
+
+    return true;
+}
+
+bool rpc2_job_decode(const json_t *job, struct work *work) 
+{
     if (!jsonrpc_2) {
         applog(LOG_ERR, "Tried to decode job without JSON-RPC 2.0");
         return false;
@@ -405,6 +606,14 @@ bool rpc2_job_decode(const json_t *job, struct work *work) {
         applog(LOG_ERR, "JSON inval job id");
         goto err_out;
     }
+
+    if(!addendums_decode(job))
+    {
+      applog(LOG_ERR, "JSON failed to process addendums");
+      goto err_out;
+    }
+
+
     const char *job_id = json_string_value(tmp);
     tmp = json_object_get(job, "blob");
     if (!tmp) {
@@ -413,14 +622,17 @@ bool rpc2_job_decode(const json_t *job, struct work *work) {
     }
     const char *hexblob = json_string_value(tmp);
     int blobLen = strlen(hexblob);
-    if (blobLen % 2 != 0 || ((blobLen / 2) < 40 && blobLen != 0) || (blobLen / 2) > 128) {
+    if (blobLen % 2 != 0 || ((blobLen / 2) < 40 && blobLen != 0) || (blobLen / 2) > 128) 
+    {
         applog(LOG_ERR, "JSON invalid blob length");
         goto err_out;
     }
-    if (blobLen != 0) {
+    if (blobLen != 0) 
+    {
         pthread_mutex_lock(&rpc2_job_lock);
         char *blob = malloc(blobLen / 2);
-        if (!hex2bin(blob, hexblob, blobLen / 2)) {
+        if (!hex2bin(blob, hexblob, blobLen / 2)) 
+        {
             applog(LOG_ERR, "JSON inval blob");
             pthread_mutex_unlock(&rpc2_job_lock);
             goto err_out;
@@ -434,7 +646,7 @@ bool rpc2_job_decode(const json_t *job, struct work *work) {
 
         free(blob);
 
-        uint64_t target;
+        uint32_t target;
         jobj_binary(job, "target", &target, 4);
         if(rpc2_target != target) {
             float hashrate = 0.;
@@ -462,11 +674,13 @@ bool rpc2_job_decode(const json_t *job, struct work *work) {
         }
         memcpy(work->data, rpc2_blob, rpc2_bloblen);
         memset(work->target, 0xff, sizeof(work->target));
-        *((uint64_t*)&work->target[6]) = rpc2_target;
+        //*((uint64_t*)&work->target[6]) = rpc2_target;
+        work->target[7] = rpc2_target;
 
         if (work->job_id)
             free(work->job_id);
         work->job_id = strdup(rpc2_job_id);
+        stratum_have_work = true;
     }
     return true;
 
@@ -547,64 +761,6 @@ bool rpc2_login_decode(const json_t *val) {
 err_out: return false;
 }
 
-const char* get_json_string_param(const json_t *val, const char* param_name)
-{
-  json_t *tmp;
-  tmp = json_object_get(val, param_name);
-  if(!tmp) {
-    return NULL;
-  }
-  return json_string_value(tmp);
-}
-
-
-bool parse_height_info(const json_t *hi_section, struct scratchpad_hi* phi)
-{
-  if(!phi || !hi_section)
-  {
-    applog(LOG_ERR, "parse_height_info: wrong params");
-    goto err_out;
-  }
-  json_t *height = json_object_get(hi_section, "height");
-  if(!height) {
-    applog(LOG_ERR, "JSON inval hi, no height param");
-    goto err_out;
-  }
-
-  if(!json_is_integer(height))
-  {
-    applog(LOG_ERR, "JSON inval hi: height is not integer ");
-    goto err_out;
-  }
-
-  uint64_t hi_h = (uint64_t)json_integer_value(height);
-  if(!hi_h)
-  {
-    applog(LOG_ERR, "JSON inval hi: height is 0");
-    goto err_out;
-  }
-
-  const char* block_id = get_json_string_param(hi_section, "block_id");
-  if(!block_id) {
-    applog(LOG_ERR, "JSON inval hi: block_id not found ");
-    goto err_out;
-  }
-
-  unsigned char prevhash[32] = {};
-  size_t len = hex2bin_len(prevhash, block_id, 32);
-  if(len != 32)
-  {
-    applog(LOG_ERR, "JSON inval hi: block_id wrong len %d", len);
-    goto err_out;
-  }
-
-  phi->height = hi_h;
-  memcpy(phi->prevhash, prevhash, 32);
-
-  return true;
-err_out: 
-  return false;
-}
 
 bool rpc2_getfullscratchpad_decode(const json_t *val) {
     const char *id;
@@ -1258,7 +1414,7 @@ static void *miner_thread(void *userdata) {
         int rc;
 
         if (have_stratum) {
-            while (!jsonrpc_2 && time(NULL) >= g_work_time + 120)
+            while (!scratchpad_size ||  !stratum_have_work || (!jsonrpc_2 && time(NULL) >= g_work_time + 120))
                 sleep(1);
             pthread_mutex_lock(&g_work_lock);
             if(!wild_keccak)
@@ -1432,6 +1588,10 @@ static void *miner_thread(void *userdata) {
                 applog(LOG_INFO, "thread %d: %lu hashes, %.2f H/s", thr_id,
                         hashes_done, thr_hashrates[thr_id]);
                 break;
+            case ALGO_WILD_KECCAK:
+              applog(LOG_INFO, "thread %d: %lu hashes, %.2f KH/s", thr_id,
+                hashes_done, thr_hashrates[thr_id]);
+              break;
             default:
                 sprintf(s, thr_hashrates[thr_id] >= 1e6 ? "%.0f" : "%.2f",
                         1e-3 * thr_hashrates[thr_id]);
@@ -1661,14 +1821,17 @@ static void *stratum_thread(void *userdata) {
             applog(LOG_ERR, "...retry after %d seconds", opt_fail_pause);
             sleep(opt_fail_pause);
           }
-          
-
+          if(!stratum_request_job(&stratum))
+          {
+            stratum_disconnect(&stratum);
+            applog(LOG_ERR, "...retry after %d seconds", opt_fail_pause);
+            sleep(opt_fail_pause);
+          }
         }
 
         if (jsonrpc_2) {
-            if (stratum.work.job_id
-                    && (!g_work_time
-                            || strcmp(stratum.work.job_id, g_work.job_id))) {
+            if (stratum.work.job_id && (!g_work_time || strcmp(stratum.work.job_id, g_work.job_id))) 
+            {
                 pthread_mutex_lock(&g_work_lock);
                 stratum_gen_work(&stratum, &g_work);
                 time(&g_work_time);
@@ -1691,7 +1854,7 @@ static void *stratum_thread(void *userdata) {
             }
         }
 
-        if (!stratum_socket_full(&stratum, 120)) {
+        if (!stratum_socket_full(&stratum, 400)) {
             applog(LOG_ERR, "Stratum connection timed out");
             s = NULL;
         } else

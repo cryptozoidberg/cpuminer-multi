@@ -1021,6 +1021,64 @@ out:
   return ret;
 }
 
+bool stratum_request_job(struct stratum_ctx *sctx)
+{
+  json_t *val = NULL, *res_val, *err_val;
+  char *sret;
+  char s[20000] = {0};
+  json_error_t err;
+  bool ret = false;
+
+  if(jsonrpc_2) 
+  {
+    sprintf(s, "{\"method\": \"getjob\", \"params\": {\"id\": \"%s\", \"hi\": { \"height\": %d, \"block_id\": \"%s\" }, \"agent\": \"cpuminer-multi/0.1\"}, \"id\": 1}",
+       rpc2_id, current_scratchpad_hi.height, bin2hex((const unsigned char*)current_scratchpad_hi.prevhash, 32));
+    
+  }else
+  {
+    return false;
+  }
+
+  if(!stratum_send_line(sctx, s))
+  {
+    applog(LOG_ERR, "Stratum failed to send getjob line");
+    goto out;
+  }
+
+  sret = stratum_recv_line(sctx);
+  if (!sret)
+  {
+    applog(LOG_ERR, "Stratum failed to recv getjob line");
+    goto out;
+  }
+
+  val = JSON_LOADS(sret, &err);
+  free(sret);
+  if (!val) {
+    applog(LOG_ERR, "JSON getwork decode failed(%d): %s", err.line, err.text);
+    goto out;
+  }
+
+  res_val = json_object_get(val, "result");
+  err_val = json_object_get(val, "error");
+
+  if (!res_val || json_is_false(res_val) ||
+    (err_val && !json_is_null(err_val)))  {
+      applog(LOG_ERR, "Stratum getjob failed");
+      goto out;
+  }
+
+  pthread_mutex_lock(&sctx->work_lock);
+  rpc2_job_decode(res_val, &sctx->work);
+  pthread_mutex_unlock(&sctx->work_lock);
+
+  ret = true;
+out:
+  if (val)
+    json_decref(val);
+
+  return ret;
+}
 
 bool stratum_authorize(struct stratum_ctx *sctx, const char *user, const char *pass)
 {
@@ -1031,8 +1089,8 @@ bool stratum_authorize(struct stratum_ctx *sctx, const char *user, const char *p
 
 	if(jsonrpc_2) {
         s = malloc(300 + strlen(user) + strlen(pass));
-        sprintf(s, "{\"method\": \"login\", \"params\": {\"login\": \"%s\", \"pass\": \"%s\", \"agent\": \"cpuminer-multi/0.1\"}, \"id\": 1}",
-                user, pass);
+        sprintf(s, "{\"method\": \"login\", \"params\": {\"login\": \"%s\", \"pass\": \"%s\", \"hi\": { \"height\": %d, \"block_id\": \"%s\" }, \"agent\": \"cpuminer-multi/0.1\"}, \"id\": 1}",
+                                                                                    user, pass, current_scratchpad_hi.height, bin2hex((const unsigned char*)current_scratchpad_hi.prevhash, 32));
 	} else {
         s = malloc(80 + strlen(user) + strlen(pass));
         sprintf(s, "{\"id\": 2, \"method\": \"mining.authorize\", \"params\": [\"%s\", \"%s\"]}",

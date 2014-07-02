@@ -225,8 +225,24 @@ extern struct work_restart *work_restart;
 extern bool jsonrpc_2;
 extern char rpc2_id[64];
 
+#define WILD_KECCAK_SCRATCHPAD_BUFFSIZE  1000000000  //100MB
+struct scratchpad_hi
+{
+  unsigned char prevhash[32];
+  uint64_t height;
+};
+
+#define WILD_KECCAK_ADDENDUMS_ARRAY_SIZE  10
+struct addendums_array
+{
+  struct scratchpad_hi hi;
+  uint64_t add_size;
+};
+
+extern volatile bool stratum_have_work;
 extern uint64_t* pscratchpad_buff;
-extern uint64_t  scratchpad_size;
+extern volatile uint64_t  scratchpad_size;
+extern struct scratchpad_hi current_scratchpad_hi;
 
 #define JSON_RPC_LONGPOLL	(1 << 0)
 #define JSON_RPC_QUIET_404	(1 << 1)
@@ -301,6 +317,7 @@ bool stratum_authorize(struct stratum_ctx *sctx, const char *user, const char *p
 bool stratum_handle_method(struct stratum_ctx *sctx, const char *s);
 
 extern bool stratum_getscratchpad(struct stratum_ctx *sctx);
+extern bool stratum_request_job(struct stratum_ctx *sctx);
 
 extern bool rpc2_job_decode(const json_t *job, struct work *work);
 extern bool rpc2_login_decode(const json_t *val);

@@ -14,6 +14,9 @@ enum {
 
 void wild_keccak_hash_dbl(const uint8_t *in, size_t inlen, uint8_t *md, const UINT64* pscr, UINT64 scr_sz)
 {      
+  if(!scr_sz)
+    return;
+
   Hash(256, in, inlen*8, md, pscr, scr_sz);
   Hash(256, md, HASH_SIZE*8, md, pscr, scr_sz);
 }
@@ -35,7 +38,8 @@ int scanhash_wildkeccak(int thr_id, uint32_t *pdata, const uint32_t *ptarget, ui
     do {
       *nonceptr = ++n;
       wild_keccak_hash_dbl_use_global_scratch((uint8_t*)pdata, 81, (uint8_t*)hash);
-      if (unlikely(  *((uint64_t*)&hash[6])    <   *((uint64_t*)&ptarget[6]) )) 
+      //if (unlikely(  *((uint64_t*)&hash[6])    <   *((uint64_t*)&ptarget[6]) )) 
+      if (unlikely(hash[7] < ptarget[7])) 
       {
         *hashes_done = n - first_nonce + 1;
         return true;
