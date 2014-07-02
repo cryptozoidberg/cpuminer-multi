@@ -29,7 +29,7 @@ void wild_keccak_hash_dbl_use_global_scratch(const uint8_t *in, size_t inlen, ui
 
 int scanhash_wildkeccak(int thr_id, uint32_t *pdata, const uint32_t *ptarget, uint32_t max_nonce, unsigned long *hashes_done) {
     
-    uint64_t *nonceptr = (uint64_t*) (((char*)pdata) + 1);
+    uint32_t *nonceptr = (uint32_t*) (((char*)pdata) + 1);
     uint32_t n = *nonceptr - 1;
     const uint32_t first_nonce = n + 1;
     const uint32_t Htarg = ptarget[7];

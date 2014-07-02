@@ -871,10 +871,22 @@ static bool submit_upstream_work(CURL *curl, struct work *work) {
     bool rc = false;
 
     /* pass if the previous hash is not the current previous hash */
-    if (!submit_old && memcmp(work->data + 1, g_work.data + 1, 32)) {
+    if(opt_algo == ALGO_WILD_KECCAK) 
+    {
+      if (!submit_old && memcmp(work->data + 1 + 8, g_work.data + 1 + 8, 32)) 
+      {
+          if (opt_debug)
+              applog(LOG_DEBUG, "DEBUG: stale work detected, discarding");
+          return true;
+      }
+    }else
+    {
+      if (!submit_old && memcmp(work->data + 1, g_work.data + 1, 32)) 
+      {
         if (opt_debug)
-            applog(LOG_DEBUG, "DEBUG: stale work detected, discarding");
+          applog(LOG_DEBUG, "DEBUG: stale work detected, discarding");
         return true;
+      }
     }
 
     if (have_stratum) {
@@ -1471,8 +1483,9 @@ static void *miner_thread(void *userdata) {
 
         }else
         {
-          if (jsonrpc_2 ? memcmp(work.data, g_work.data, 39) || memcmp(((uint8_t*) work.data) + 1 + 8, ((uint8_t*) g_work.data) + 1 + 8, 80-9):memcmp(work.data, g_work.data, 80)) 
+          if (memcmp(((uint8_t*) work.data) + 1 + 8, ((uint8_t*) g_work.data) + 1 + 8, 80-9)) 
           {
+            applog(LOG_ERR, "work retrieval failed, exiting mining thread %d", mythr->id);
             work_free(&work);
             work_copy(&work, &g_work);
             nonceptr = (uint32_t*) (((char*)work.data) + 1);
@@ -1480,6 +1493,7 @@ static void *miner_thread(void *userdata) {
           } else
             ++(*nonceptr);
         }
+        
 
         pthread_mutex_unlock(&g_work_lock);
         work_restart[thr_id].restart = 0;
@@ -1488,8 +1502,7 @@ static void *miner_thread(void *userdata) {
         if (have_stratum)
             max64 = LP_SCANTIME;
         else
-            max64 = g_work_time + (have_longpoll ? LP_SCANTIME : opt_scantime)
-                    - time(NULL );
+            max64 = g_work_time + (have_longpoll ? LP_SCANTIME : opt_scantime) - time(NULL );
         max64 *= thr_hashrates[thr_id];
         if (max64 <= 0) {
             switch (opt_algo) {
@@ -1511,6 +1524,8 @@ static void *miner_thread(void *userdata) {
             max_nonce = end_nonce;
         else
             max_nonce = *nonceptr + max64;
+
+        applog(LOG_INFO, "Thread %d is going to scan with start nonce=%08x, end_nonce=%08x", thr_id, *nonceptr, max_nonce);
 
         hashes_done = 0;
         gettimeofday(&tv_start, NULL );
@@ -1590,7 +1605,7 @@ static void *miner_thread(void *userdata) {
                 break;
             case ALGO_WILD_KECCAK:
               applog(LOG_INFO, "thread %d: %lu hashes, %.2f KH/s", thr_id,
-                hashes_done, thr_hashrates[thr_id]);
+                hashes_done, 1e-3 * thr_hashrates[thr_id]);
               break;
             default:
                 sprintf(s, thr_hashrates[thr_id] >= 1e6 ? "%.0f" : "%.2f",
