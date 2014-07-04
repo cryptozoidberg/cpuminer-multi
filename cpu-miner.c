@@ -325,7 +325,8 @@ json_t *json_rpc2_call_recur(CURL *curl, const char *url,
         message = error;
     else
         message = json_object_get(error, "message");
-    if(!message || !json_is_string(message)) goto end;
+    if(!message || !json_is_string(message)) 
+      goto end;
     const char *mes = json_string_value(message);
     if(!strcmp(mes, "Unauthenticated")) {
         pthread_mutex_lock(&rpc2_login_lock);
@@ -1771,19 +1772,34 @@ static bool stratum_handle_response(char *buf) {
     err_val = json_object_get(val, "error");
     id_val = json_object_get(val, "id");
 
-    if (!id_val || json_is_null(id_val) || !res_val)
+    if (!id_val || json_is_null(id_val) /*|| !res_val*/)
         goto out;
 
-    if(jsonrpc_2) {
-        json_t *status = json_object_get(res_val, "status");
+    if(jsonrpc_2) 
+    {
+        json_t *status = NULL;
+        if(res_val) 
+          status = json_object_get(res_val, "status");
         if(status) {
             const char *s = json_string_value(status);
             valid = !strcmp(s, "OK") && json_is_null(err_val);
         } else {
             valid = json_is_null(err_val);
         }
+
+        if(err_val && !json_is_null(err_val) )
+        {
+          const char* perr_msg = get_json_string_param(err_val, "message");
+          if(perr_msg && !strcmp(perr_msg, "Unauthenticated"))
+          {
+            applog(LOG_ERR, "Response returned \"Unauthenticated\", need to relogin");
+            strcpy(rpc2_id, "");
+            err_val = json_object_get(err_val, "message");
+            valid = false;
+          }
+        }
     } else {
-        valid = json_is_true(res_val);
+        valid = res_val && json_is_true(res_val);
     }
 
     share_result(valid, NULL,
@@ -1826,6 +1842,19 @@ static void *stratum_thread(void *userdata) {
                 applog(LOG_ERR, "...retry after %d seconds", opt_fail_pause);
                 sleep(opt_fail_pause);
             }
+        }
+
+        if(!strcmp(rpc2_id, ""))
+        {
+          applog(LOG_ERR, "Re-login...");
+          //not logged in, try to relogin
+          if(!stratum_authorize(&stratum, rpc_user, rpc_pass)) 
+          {
+            stratum_disconnect(&stratum);
+            applog(LOG_ERR, "Failed...retry after %d seconds", opt_fail_pause);
+            sleep(opt_fail_pause);
+          }
+          
         }
 
         if(opt_algo == ALGO_WILD_KECCAK && !scratchpad_size)

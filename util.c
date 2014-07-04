@@ -683,7 +683,7 @@ static void stratum_buffer_append(struct stratum_ctx *sctx, const char *s)
 	strcpy(sctx->sockbuf + old, s);
 }
 
-char *stratum_recv_line(struct stratum_ctx *sctx)
+char *stratum_recv_line_timeout(struct stratum_ctx *sctx, int timeout_)
 {
 	ssize_t len, buflen;
 	char *tok, *sret = NULL;
@@ -693,7 +693,7 @@ char *stratum_recv_line(struct stratum_ctx *sctx)
 		time_t rstart;
 
 		time(&rstart);
-		if (!socket_full(sctx->sock, 60)) {
+		if (!socket_full(sctx->sock, timeout_)) {
 			applog(LOG_ERR, "stratum_recv_line timed out");
 			goto out;
 		}
@@ -708,13 +708,13 @@ char *stratum_recv_line(struct stratum_ctx *sctx)
 				break;
 			}
 			if (n < 0) {
-				if (!socket_blocks() || !socket_full(sctx->sock, 1)) {
+				if (!socket_blocks() || !socket_full(sctx->sock, timeout_ == 60 ? 1: timeout_ )) {
 					ret = false;
 					break;
 				}
 			} else
 				stratum_buffer_append(sctx, s);
-		} while (time(NULL) - rstart < 60 && !strstr(sctx->sockbuf, "\n"));
+		} while (time(NULL) - rstart < timeout_ && !strstr(sctx->sockbuf, "\n"));
 
 		if (!ret) {
 			applog(LOG_ERR, "stratum_recv_line failed");
@@ -753,6 +753,12 @@ out:
   }
 	return sret;
 }
+
+char *stratum_recv_line(struct stratum_ctx *sctx)
+{
+  return stratum_recv_line_timeout(sctx, 60);
+}
+
 
 #if LIBCURL_VERSION_NUM >= 0x071101
 static curl_socket_t opensocket_grab_cb(void *clientp, curlsocktype purpose,
@@ -982,14 +988,9 @@ bool stratum_getscratchpad(struct stratum_ctx *sctx) {
   if (!stratum_send_line(sctx, s))
     goto out;
 
-  while (1) {
-    sret = stratum_recv_line(sctx);
-    if (!sret)
-      goto out;
-    if (!stratum_handle_method(sctx, sret))
-      break;
-    free(sret);
-  }
+  sret = stratum_recv_line_timeout(sctx, 120);
+  if (!sret)
+    goto out;
   applog(LOG_DEBUG, "Getting full scratchpad received line");
 
   val = JSON_LOADS(sret, &err);
@@ -1000,15 +1001,6 @@ bool stratum_getscratchpad(struct stratum_ctx *sctx) {
   }
 
   applog(LOG_DEBUG, "Getting full scratchpad parsed line");
-
-  //res_val = json_object_get(val, "result");
-  //err_val = json_object_get(val, "error");
-
-  //if (!res_val || json_is_false(res_val) || (err_val && !json_is_null(err_val)))  
-  //{
-  //    applog(LOG_ERR, "Stratum rpc2_getscratchpad failed");
-  //    goto out;
-  //}
 
   bool ret = rpc2_getfullscratchpad_decode(val);  
 
