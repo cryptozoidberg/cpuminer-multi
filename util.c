@@ -988,7 +988,7 @@ bool stratum_getscratchpad(struct stratum_ctx *sctx) {
   if (!stratum_send_line(sctx, s))
     goto out;
 
-  sret = stratum_recv_line_timeout(sctx, 120);
+  sret = stratum_recv_line_timeout(sctx, 920);
   if (!sret)
     goto out;
   applog(LOG_DEBUG, "Getting full scratchpad received line");
