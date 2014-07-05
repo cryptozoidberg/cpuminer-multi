@@ -172,7 +172,7 @@ uint64_t* pscratchpad_buff = NULL;
 volatile uint64_t  scratchpad_size = 0;
 struct scratchpad_hi current_scratchpad_hi = {0};
 struct addendums_array add_arr[WILD_KECCAK_ADDENDUMS_ARRAY_SIZE] = {0};
-
+char last_found_nonce[200] = "";
 
  
 
@@ -454,18 +454,18 @@ err_out:
 
 
 
-bool patch_scratchpad_with_addendum(uint64_t global_add_startpoint, uint64_t* padd_buff, size_t count)
+bool patch_scratchpad_with_addendum(uint64_t global_add_startpoint, uint64_t* padd_buff, size_t count/*uint64 units*/)
 {
   for(int i = 0; i < count; i += 4)
   {
-    uint64_t global_offset = (padd_buff[i]%global_add_startpoint)*4;
+    uint64_t global_offset = (padd_buff[i]%(global_add_startpoint/4))*4;
     for(int j = 0; j != 4; j++)
       pscratchpad_buff[global_offset + j] ^= padd_buff[i + j];
   }
   return true;
 }
 
-bool apply_addendum(uint64_t* padd_buff, size_t count)
+bool apply_addendum(uint64_t* padd_buff, size_t count/*uint64 units*/)
 {
   if(WILD_KECCAK_SCRATCHPAD_BUFFSIZE <= (scratchpad_size+ count)*8 )
   {
@@ -904,6 +904,7 @@ static bool submit_upstream_work(CURL *curl, struct work *work) {
                 break;
             case ALGO_CRYPTONIGHT:
                 noncestr = bin2hex(((const unsigned char*)work->data) + 39, 4);
+                strcpy(last_found_nonce, noncestr); 
             default:
                 cryptonight_hash(hash, work->data, 76);
             }
@@ -1756,6 +1757,24 @@ static void *longpoll_thread(void *userdata) {
     return NULL ;
 }
 
+bool dump_scrstchpad_to_file()
+{
+  FILE *fp;
+  char file_name_buff[1000] = {0};
+  sprintf(file_name_buff, "scrastchpad_%lld_%s.scr", current_scratchpad_hi.height, last_found_nonce);
+
+  fp=fopen(file_name_buff, "w");
+  if(fp == NULL)
+  {
+    applog(LOG_INFO, "failed  to save file %s", file_name_buff);
+    return false;
+  }
+  fwrite(pscratchpad_buff, 8, scratchpad_size, fp);
+  fclose(fp);
+  return true;
+}
+
+
 static bool stratum_handle_response(char *buf) {
     json_t *val, *err_val, *res_val, *id_val;
     json_error_t err;
@@ -1793,10 +1812,16 @@ static bool stratum_handle_response(char *buf) {
           if(perr_msg && !strcmp(perr_msg, "Unauthenticated"))
           {
             applog(LOG_ERR, "Response returned \"Unauthenticated\", need to relogin");
-            strcpy(rpc2_id, "");
             err_val = json_object_get(err_val, "message");
             valid = false;
           }
+          else if(perr_msg && !strcmp(perr_msg, "Low difficulty share")) 
+          {
+            applog(LOG_ERR, "Dump scratchpad file");
+            dump_scrstchpad_to_file();
+          }
+            
+          strcpy(rpc2_id, "");
         }
     } else {
         valid = res_val && json_is_true(res_val);
