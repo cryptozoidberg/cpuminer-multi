@@ -520,6 +520,12 @@ bool addendum_decode(const json_t *addm)
 
     if(current_scratchpad_hi.height != hi.height -1)
     {
+      if(current_scratchpad_hi.height > hi.height -1)
+      {
+        //skip low scratchpad
+        applog(LOG_ERR, "addendum with hi.height=%lld skiped since current_scratchpad_hi.height=%lld", hi.height, current_scratchpad_hi.height);        
+        return true;
+      }
       //TODO: ADD SPLIT HANDLING HERE
       applog(LOG_ERR, "JSON height in addendum-1 (%lld-1) missmatched with current_scratchpad_hi.height(%lld)", hi.height, current_scratchpad_hi.height);
       return false;
@@ -556,9 +562,10 @@ bool addendum_decode(const json_t *addm)
       applog(LOG_ERR, "JSON Failed to apply_addendum!");
       return false;
     }
+    uint64_t old_height = current_scratchpad_hi.height;
     memcpy(&current_scratchpad_hi, &hi, sizeof(struct scratchpad_hi));
 
-    applog(LOG_INFO, "Addendum applied: %lld blocks added", add_len/64);
+    applog(LOG_INFO, "ADDENDUM APPLIED: %lld --> %lld  %lld blocks added", old_height, current_scratchpad_hi.height, add_len/64);
     return true;
 }
 
@@ -756,6 +763,7 @@ bool rpc2_login_decode(const json_t *val) {
     applog(LOG_ERR, "JSON returned status \"%s\"", s);
     return false;
   }
+
 
   return true;
 
