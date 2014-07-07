@@ -223,7 +223,7 @@ extern int longpoll_thr_id;
 extern int stratum_thr_id;
 extern struct work_restart *work_restart;
 extern bool jsonrpc_2;
-extern char rpc2_id[64];
+extern char rpc2_id[65];
 
 #define WILD_KECCAK_SCRATCHPAD_BUFFSIZE  1000000000  //100MB
 struct scratchpad_hi
