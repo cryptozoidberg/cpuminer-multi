@@ -171,7 +171,7 @@ volatile bool stratum_have_work = false;
 uint64_t* pscratchpad_buff = NULL;
 volatile uint64_t  scratchpad_size = 0;
 struct scratchpad_hi current_scratchpad_hi = {0};
-struct addendums_array add_arr[WILD_KECCAK_ADDENDUMS_ARRAY_SIZE] = {0};
+struct addendums_array_entry add_arr[WILD_KECCAK_ADDENDUMS_ARRAY_SIZE] = {0};
 char last_found_nonce[200] = "";
 
  
@@ -487,6 +487,65 @@ bool apply_addendum(uint64_t* padd_buff, size_t count/*uint64 units*/)
   return true;
 }
 
+bool pop_addendum(struct addendums_array_entry* padd_entry)
+{
+  if(!padd_entry)
+    return false;
+
+  if(!padd_entry->add_size || !padd_entry->prev_hi.height)
+  {
+    applog(LOG_ERR, "wrong parameters");
+    return false;
+  }
+  patch_scratchpad_with_addendum(scratchpad_size - padd_entry->add_size, &pscratchpad_buff[scratchpad_size - padd_entry->add_size], padd_entry->add_size);
+  scratchpad_size = scratchpad_size - padd_entry->add_size;
+  memcpy(&current_scratchpad_hi, &padd_entry->prev_hi, sizeof(padd_entry->prev_hi));
+
+  memset(padd_entry, 0, sizeof(struct addendums_array_entry));
+  return true;
+}
+
+bool revert_scratchpad()
+{
+  //playback scratchpad addendums for whole add_arr
+  size_t i_ = 0;
+  size_t i = 0;
+  size_t arr_size = sizeof(add_arr)/sizeof(add_arr[0]);
+
+  for(i_=0; i_ != arr_size; i_++)
+  {
+    i = arr_size-(i_+1);
+    if(!add_arr[i].prev_hi.height)
+      continue;
+    pop_addendum(&add_arr[i]);
+  }
+  return true;
+}
+
+
+bool push_addendum_info(struct scratchpad_hi* pprev_hi, uint64_t size /* uint64 units count*/)
+{
+  //find last free entry
+  size_t i = 0;
+  size_t arr_size = sizeof(add_arr)/sizeof(add_arr[0]);
+
+  for(i=0; i != arr_size; i++)
+  {
+    if(!add_arr[i].prev_hi.height)
+      break;
+  }
+
+  if(i >= arr_size)
+  {//shift array
+    memmove(&add_arr[0], &add_arr[1], (arr_size-1)*sizeof(add_arr[0]));   
+    i = arr_size - 1;
+  }
+  memcpy(&add_arr[i].prev_hi, pprev_hi, sizeof(add_arr[i].prev_hi));
+  add_arr[i].add_size = size;
+
+  return true;
+}
+
 bool addendum_decode(const json_t *addm)
 {
     struct scratchpad_hi hi = {0};
@@ -527,7 +586,10 @@ bool addendum_decode(const json_t *addm)
         return true;
       }
       //TODO: ADD SPLIT HANDLING HERE
-      applog(LOG_ERR, "JSON height in addendum-1 (%lld-1) missmatched with current_scratchpad_hi.height(%lld)", hi.height, current_scratchpad_hi.height);
+      applog(LOG_ERR, "JSON height in addendum-1 (%lld-1) missmatched with current_scratchpad_hi.height(%lld), reverting scratchpad and re-login", hi.height, current_scratchpad_hi.height);
+      revert_scratchpad();
+      //init re-login
+      strcpy(rpc2_id, "");
       return false;
     }
 
@@ -562,8 +624,11 @@ bool addendum_decode(const json_t *addm)
       applog(LOG_ERR, "JSON Failed to apply_addendum!");
       return false;
     }
+
+    push_addendum_info(&current_scratchpad_hi, add_len/16);
     uint64_t old_height = current_scratchpad_hi.height;
     memcpy(&current_scratchpad_hi, &hi, sizeof(struct scratchpad_hi));
+    
 
     applog(LOG_INFO, "ADDENDUM APPLIED: %lld --> %lld  %lld blocks added", old_height, current_scratchpad_hi.height, add_len/64);
     return true;
@@ -1826,7 +1891,7 @@ static bool stratum_handle_response(char *buf) {
           else if(perr_msg && !strcmp(perr_msg, "Low difficulty share")) 
           {
             applog(LOG_ERR, "Dump scratchpad file");
-            dump_scrstchpad_to_file();
+            //dump_scrstchpad_to_file();
           }
             
           strcpy(rpc2_id, "");

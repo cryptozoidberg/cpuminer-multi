@@ -233,9 +233,9 @@ struct scratchpad_hi
 };
 
 #define WILD_KECCAK_ADDENDUMS_ARRAY_SIZE  10
-struct addendums_array
+struct addendums_array_entry
 {
-  struct scratchpad_hi hi;
+  struct scratchpad_hi prev_hi;
   uint64_t add_size;
 };
 
