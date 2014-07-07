@@ -809,7 +809,7 @@ bool rpc2_login_decode(const json_t *val) {
     goto err_out;
   }
 
-  memcpy(&rpc2_id, id, 64);
+  strncpy(rpc2_id, id, sizeof(rpc2_id)-1);
 
   if(opt_debug)
     applog(LOG_DEBUG, "Auth id: %s", id);
