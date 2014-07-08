@@ -179,6 +179,7 @@ static const char cachedir_suffix[] = "boolberry"; /* scratchpad cache saved as 
 struct scratchpad_hi current_scratchpad_hi = {0};
 static struct addendums_array_entry add_arr[WILD_KECCAK_ADDENDUMS_ARRAY_SIZE] = {0};
 static char last_found_nonce[200] = "";
+static time_t prev_save = 0;
 
  
 
@@ -751,7 +752,7 @@ bool rpc2_job_decode(const json_t *job, struct work *work)
             pthread_mutex_unlock(&stats_lock);
             
             double difficulty = (((double) 0xffffffff) / target);
-            applog(LOG_INFO, "Pool set diff to %.0f", difficulty)
+            applog(LOG_INFO, "Pool set diff to %.0f", difficulty);
             rpc2_target = target;
         }
 
@@ -1827,8 +1828,7 @@ static void *longpoll_thread(void *userdata) {
 bool store_scratchpad_to_file(bool do_fsync)
 {
   FILE *fp;
-  char file_name_buff[PATH_MAX];
-  static time_t prev_save;
+  char file_name_buff[PATH_MAX];  
   int ret;
 
   if(opt_algo != ALGO_WILD_KECCAK || !scratchpad_size) return true;
@@ -1842,8 +1842,8 @@ bool store_scratchpad_to_file(bool do_fsync)
     return false;
   }
 
-  scratchpad_file_header sf = {0};
-  sf.add_arr = add_arr;
+  struct scratchpad_file_header sf = {0};
+  memcpy(&sf.add_arr[0], &add_arr[0], sizeof(sf.add_arr));
   sf.current_hi = current_scratchpad_hi;
   sf.scratchpad_size = scratchpad_size;
 
@@ -1878,7 +1878,7 @@ bool store_scratchpad_to_file(bool do_fsync)
     return false;
   }
   applog(LOG_DEBUG, "saved scratchpad to %s (%zu+%zu bytes)", scratchpad_file,
-    sizeof(current_scratchpad_hi), (size_t)scratchpad_size * 8);
+    sizeof(struct scratchpad_file_header), (size_t)scratchpad_size * 8);
   return true;
 }
 
@@ -1887,7 +1887,7 @@ bool store_scratchpad_to_file(bool do_fsync)
 {
   FILE *fp;
   long flen;
-  size_t szhi = sizeof(scratchpad_file_header);
+  size_t szhi = sizeof(struct scratchpad_file_header);
 
   fp = fopen(fname, "rb");
   if (fp == NULL) 
@@ -1904,7 +1904,7 @@ bool store_scratchpad_to_file(bool do_fsync)
     return false;
   }
   flen = ftell(fp);*/
-  scratchpad_file_header fh = {0};
+  struct scratchpad_file_header fh = {0};
   if ((fread(&fh, sizeof(fh), 1, fp) != 1))
   {
       applog(LOG_ERR, "read error from %s: %s", fname, strerror(errno));
@@ -1928,12 +1928,14 @@ bool store_scratchpad_to_file(bool do_fsync)
       return false;
   }
   scratchpad_size = fh.scratchpad_size;
+  current_scratchpad_hi = fh.current_hi;
+  memcpy(&add_arr[0], &fh.add_arr[0], sizeof(fh.add_arr));
+
   applog(LOG_DEBUG, "loaded scratchpad %s (%ld bytes), height=%" PRIu64, fname, flen, current_scratchpad_hi.height);
   fclose(fp);
+  prev_save = time(NULL);
   return true;
 }
-
-
 
 
 bool dump_scratchpad_to_file_debug()
@@ -1963,6 +1965,27 @@ bool dump_scratchpad_to_file_debug()
   }
 
   fclose(fp);
+  return true;
+}
+
+
+static bool try_mkdir_chdir(const char *dirn)
+{
+  if (chdir(dirn) == -1) {
+    if (errno == ENOENT) {
+      if (mkdir(dirn, 0700) == -1) {
+        applog(LOG_ERR, "mkdir failed: %s", strerror(errno));
+        return false;
+      }
+      if (chdir(dirn) == -1) {
+        applog(LOG_ERR, "chdir failed: %s", strerror(errno));
+        return false;
+      }
+    } else {
+      applog(LOG_ERR, "chdir failed: %s", strerror(errno));
+      return false;
+    }
+  }
   return true;
 }
 
@@ -2076,13 +2099,12 @@ static void *stratum_thread(void *userdata) {
         if(opt_algo == ALGO_WILD_KECCAK)
         {
           /* save every 12 hours */
-          if ((time(NULL) - prev_save) > 12*3600) 
+          if (scratchpad_size && (time(NULL) - prev_save) > 12*3600) 
           {
             store_scratchpad_to_file(false);
             prev_save = time(NULL);
           }
-        }
-        
+        }        
 
 
         if(opt_algo == ALGO_WILD_KECCAK && !scratchpad_size)
@@ -2093,6 +2115,9 @@ static void *stratum_thread(void *userdata) {
             applog(LOG_ERR, "...retry after %d seconds", opt_fail_pause);
             sleep(opt_fail_pause);
           }
+          store_scratchpad_to_file(false);
+          prev_save = time(NULL);
+
           if(!stratum_request_job(&stratum))
           {
             stratum_disconnect(&stratum);
@@ -2458,6 +2483,8 @@ int main(int argc, char *argv[]) {
     rpc_user = strdup("");
     rpc_pass = strdup("");
 
+    tzset();
+
     /* parse command line */
     parse_cmdline(argc, argv);
 
@@ -2469,17 +2496,42 @@ int main(int argc, char *argv[]) {
         jsonrpc_2 = true;
         applog(LOG_INFO, "Using JSON-RPC 2.0");
     } else if(opt_algo == ALGO_WILD_KECCAK) {
+      char cachedir[PATH_MAX];      
       jsonrpc_2 = true;
-      applog(LOG_INFO, "Using JSON-RPC 2.0");
-      pscratchpad_buff = malloc(WILD_KECCAK_SCRATCHPAD_BUFFSIZE);
-      if(!pscratchpad_buff)
-      {
-        applog(LOG_ERR, "scratchpad allocation failed");
+      //TODO: add windows version code here
+      if (!getenv("HOME")) {
+        applog(LOG_ERR, "$HOME not set");
         return 1;
+      }
+      if (!try_mkdir_chdir(getenv("HOME")) || !try_mkdir_chdir(".cache") || !try_mkdir_chdir(cachedir_suffix))
+        return 1;
+      if (getcwd(cachedir, sizeof(cachedir) - 22) == NULL) {
+        applog(LOG_ERR, "getcwd failed: %s", strerror(errno));
+        return 1;
+      }
+      snprintf(scratchpad_file, sizeof(scratchpad_file), "%s/scratchpad.bin", cachedir);
+      applog(LOG_DEBUG, "wildkeccak scratchpad cache %s", scratchpad_file);
+
+
+
+      applog(LOG_INFO, "Using JSON-RPC 2.0");
+      size_t sz = WILD_KECCAK_SCRATCHPAD_BUFFSIZE;
+      pscratchpad_buff = mmap(0, sz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS |
+        MAP_HUGETLB | MAP_POPULATE, 0, 0);
+      if(MAP_FAILED == pscratchpad_buff)      
+      {
+        applog(LOG_INFO, "hugetlb not available");
+        pscratchpad_buff = malloc(sz);
+        if(!pscratchpad_buff)
+        {
+          applog(LOG_ERR, "scratchpad allocation failed");
+          return 1;
+        }
+      } else {
+        applog(LOG_INFO, "using hugetlb");
       }
       //try to load scratchpad from file 
       load_scratchpad_from_file(scratchpad_file);
-
     }
 
 

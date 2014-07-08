@@ -245,8 +245,8 @@ struct __attribute__((__packed__)) addendums_array_entry
 
 struct __attribute__((__packed__)) scratchpad_file_header
 {
-  scratchpad_hi current_hi;
-  addendums_array_entry add_arr[WILD_KECCAK_ADDENDUMS_ARRAY_SIZE];
+  struct scratchpad_hi current_hi;
+  struct addendums_array_entry add_arr[WILD_KECCAK_ADDENDUMS_ARRAY_SIZE];
   uint64_t scratchpad_size;
 };
 
