@@ -11,6 +11,7 @@
 #include "cpuminer-config.h"
 #define _GNU_SOURCE
 
+#include <sys/stat.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -19,6 +20,7 @@
 #include <unistd.h>
 #include <sys/time.h>
 #include <time.h>
+#include <sys/mman.h>
 #ifdef WIN32
 #include <windows.h>
 #else
@@ -170,9 +172,13 @@ static char *rpc2_job_id = NULL;
 volatile bool stratum_have_work = false;
 uint64_t* pscratchpad_buff = NULL;
 volatile uint64_t  scratchpad_size = 0;
+
+static char scratchpad_file[PATH_MAX];
+static const char cachedir_suffix[] = "boolberry"; /* scratchpad cache saved as ~/.cache/boolberry/scratchpad.bin */
+
 struct scratchpad_hi current_scratchpad_hi = {0};
-struct addendums_array_entry add_arr[WILD_KECCAK_ADDENDUMS_ARRAY_SIZE] = {0};
-char last_found_nonce[200] = "";
+static struct addendums_array_entry add_arr[WILD_KECCAK_ADDENDUMS_ARRAY_SIZE] = {0};
+static char last_found_nonce[200] = "";
 
  
 
@@ -452,6 +458,12 @@ err_out:
   return false;
 }
 
+void reset_scratchpad(void)
+{
+  current_scratchpad_hi.height = 0;
+  scratchpad_size = 0;
+  //unlink(scratchpad_file);
+}
 
 
 bool patch_scratchpad_with_addendum(uint64_t global_add_startpoint, uint64_t* padd_buff, size_t count/*uint64 units*/)
@@ -467,21 +479,20 @@ bool patch_scratchpad_with_addendum(uint64_t global_add_startpoint, uint64_t* pa
 
 bool apply_addendum(uint64_t* padd_buff, size_t count/*uint64 units*/)
 {
-  if(WILD_KECCAK_SCRATCHPAD_BUFFSIZE <= (scratchpad_size+ count)*8 )
+  if(WILD_KECCAK_SCRATCHPAD_BUFFSIZE <= (scratchpad_size + count)*8 )
   {
-    applog(LOG_ERR, "!!!!!!! WILD_KECCAK_SCRATCHPAD_BUFFSIZE is overflowed !!!!!!!! please increase this constant! ");
+    applog(LOG_ERR, "!!!!!!! WILD_KECCAK_SCRATCHPAD_BUFFSIZE overflowed !!!!!!!! please increase this constant! ");
     return false;
   }
 
-  if(!patch_scratchpad_with_addendum(scratchpad_size, padd_buff, count) )
+  if(!patch_scratchpad_with_addendum(scratchpad_size, padd_buff, count))
   {
-    applog(LOG_ERR, "patch_scratchpad_with_addendum is broken, reseting scratchpad");
-    current_scratchpad_hi.height = 0;
-    scratchpad_size = 0;
+    applog(LOG_ERR, "patch_scratchpad_with_addendum is broken, resetting scratchpad");
+    reset_scratchpad();
     return false;
   }
   for(int k = 0; k != count; k++)
-    pscratchpad_buff[scratchpad_size+k] =   padd_buff[k];
+    pscratchpad_buff[scratchpad_size+k] = padd_buff[k];
 
   scratchpad_size += count;
   return true;
@@ -613,25 +624,36 @@ bool addendum_decode(const json_t *addm)
       return false;
     }
     uint64_t* padd_buff = malloc(add_len/2);
+    if (!padd_buff)
+    {
+      applog(LOG_ERR, "out of memory, wanted %zu", add_len/2);
+      return false;
+    }
+
     if(!hex2bin((unsigned char*)padd_buff, addm_hexstr, add_len/2))
     {
       applog(LOG_ERR, "JSON wrong addm hex str len");
-      return false;
+      goto err_out;
     }
 
     if(!apply_addendum(padd_buff, add_len/16))
     {
       applog(LOG_ERR, "JSON Failed to apply_addendum!");
-      return false;
+      goto err_out;
     }
+    free(padd_buff);
 
     push_addendum_info(&current_scratchpad_hi, add_len/16);
     uint64_t old_height = current_scratchpad_hi.height;
-    memcpy(&current_scratchpad_hi, &hi, sizeof(struct scratchpad_hi));
+    current_scratchpad_hi = hi;
     
 
     applog(LOG_INFO, "ADDENDUM APPLIED: %lld --> %lld  %lld blocks added", old_height, current_scratchpad_hi.height, add_len/64);
     return true;
+
+err_out:
+    free(padd_buff);
+    return false;
 }
 
 bool addendums_decode(const json_t *job)
@@ -729,7 +751,7 @@ bool rpc2_job_decode(const json_t *job, struct work *work)
             pthread_mutex_unlock(&stats_lock);
             
             double difficulty = (((double) 0xffffffff) / target);
-            applog(LOG_INFO, "Pool set diff to %g", difficulty);
+            applog(LOG_INFO, "Pool set diff to %.0f", difficulty)
             rpc2_target = target;
         }
 
@@ -903,10 +925,9 @@ bool rpc2_getfullscratchpad_decode(const json_t *val) {
 
 static void share_result(int result, struct work *work, const char *reason) {
     char s[345];
-    double hashrate;
+    double hashrate = 0.0;
     int i;
 
-    hashrate = 0.;
     pthread_mutex_lock(&stats_lock);
     for (i = 0; i < opt_n_threads; i++)
         hashrate += thr_hashrates[i];
@@ -916,7 +937,7 @@ static void share_result(int result, struct work *work, const char *reason) {
     switch (opt_algo) {
     case ALGO_CRYPTONIGHT:
     case ALGO_WILD_KECCAK:
-        applog(LOG_INFO, "accepted: %lu/%lu (%.2f%%), %.2f H/s at diff %g %s",
+        applog(LOG_INFO, "accepted: %lu/%lu (%.2f%%), %.2f h/s at diff %.0f %s",
                 accepted_count, accepted_count + rejected_count,
                 100. * accepted_count / (accepted_count + rejected_count), hashrate,
                 (((double) 0xffffffff) / (work ? work->target[7] : rpc2_target)),
@@ -973,7 +994,8 @@ static bool submit_upstream_work(CURL *curl, struct work *work) {
             switch(opt_algo) {
             case ALGO_WILD_KECCAK:
                 noncestr = bin2hex(((const unsigned char*)work->data) + 1, 8);
-                wild_keccak_hash_dbl_use_global_scratch((uint8_t*)work->data, 81, (uint8_t*)hash);
+                strcpy(last_found_nonce, noncestr);
+                wild_keccak_hash_dbl_use_global_scratch((uint8_t*)work->data, 81, (uint8_t*)hash);                
                 break;
             case ALGO_CRYPTONIGHT:
                 noncestr = bin2hex(((const unsigned char*)work->data) + 39, 4);
@@ -1012,6 +1034,7 @@ static bool submit_upstream_work(CURL *curl, struct work *work) {
             switch(opt_algo) {
             case ALGO_WILD_KECCAK:
               noncestr = bin2hex(((const unsigned char*)work->data) + 1, 8);
+              strcpy(last_found_nonce, noncestr);
               wild_keccak_hash_dbl_use_global_scratch((uint8_t*)work->data, 81, (uint8_t*)hash);
               break;
             case ALGO_CRYPTONIGHT:
@@ -1253,35 +1276,6 @@ static bool workio_login(CURL *curl) {
 }
 
 
-// static bool workio_getscratchpad(CURL *curl) {
-//   
-//   int failures = 0;
-// 
-//   //not sure that we need this lock for getscratchpad
-//   pthread_mutex_lock(&rpc2_getscratchpad_lock);
-// 
-// 
-//   while (!rpc2_getscratchpad(curl)) {
-//     if (unlikely((opt_retries >= 0) && (++failures > opt_retries))) {
-//       applog(LOG_ERR, "...terminating workio thread");
-//       pthread_mutex_unlock(&rpc2_getscratchpad_lock);
-//       return false;
-//     }
-// 
-//     /* pause, then restart work-request loop */
-//     applog(LOG_ERR, "...retry after %d seconds", opt_fail_pause);
-//     sleep(opt_fail_pause);
-//     pthread_mutex_unlock(&rpc2_getscratchpad_lock);
-//     pthread_mutex_lock(&rpc2_getscratchpad_lock);
-//   }
-//   pthread_mutex_unlock(&rpc2_getscratchpad_lock);
-// 
-//   return true;
-// }
-// 
-
-
-
 static void *workio_thread(void *userdata) {
     struct thr_info *mythr = userdata;
     CURL *curl;
@@ -1501,7 +1495,7 @@ static void *miner_thread(void *userdata) {
         int rc;
 
         if (have_stratum) {
-            while (!scratchpad_size ||  !stratum_have_work || (!jsonrpc_2 && time(NULL) >= g_work_time + 120))
+            while (!scratchpad_size || !stratum_have_work || (!jsonrpc_2 && time(NULL) >= g_work_time + 120))
                 sleep(1);
             pthread_mutex_lock(&g_work_lock);
             if(!wild_keccak)
@@ -1675,11 +1669,11 @@ static void *miner_thread(void *userdata) {
         if (!opt_quiet) {
             switch(opt_algo) {
             case ALGO_CRYPTONIGHT:
-                applog(LOG_INFO, "thread %d: %lu hashes, %.2f H/s", thr_id,
+                applog(LOG_INFO, "thread %d: %lu hashes, %.2f h/s", thr_id,
                         hashes_done, thr_hashrates[thr_id]);
                 break;
             case ALGO_WILD_KECCAK:
-              applog(LOG_INFO, "thread %d: %lu hashes, %.2f KH/s", thr_id,
+              applog(LOG_INFO, "thread %d: %lu hashes, %.2f kh/s", thr_id,
                 hashes_done, 1e-3 * thr_hashrates[thr_id]);
               break;
             default:
@@ -1830,19 +1824,144 @@ static void *longpoll_thread(void *userdata) {
     return NULL ;
 }
 
-bool dump_scrstchpad_to_file()
+bool store_scratchpad_to_file(bool do_fsync)
+{
+  FILE *fp;
+  char file_name_buff[PATH_MAX];
+  static time_t prev_save;
+  int ret;
+
+  if(opt_algo != ALGO_WILD_KECCAK || !scratchpad_size) return true;
+
+  snprintf(file_name_buff, sizeof(file_name_buff), "%s.tmp", scratchpad_file);
+  unlink(file_name_buff);
+  fp = fopen(file_name_buff, "wbx");
+  if(fp == NULL)
+  {
+    applog(LOG_INFO, "failed to create file %s: %s", file_name_buff, strerror(errno));
+    return false;
+  }
+
+  scratchpad_file_header sf = {0};
+  sf.add_arr = add_arr;
+  sf.current_hi = current_scratchpad_hi;
+  sf.scratchpad_size = scratchpad_size;
+
+
+
+  if ((fwrite(&sf, sizeof(sf), 1, fp) != 1) ||
+     (fwrite(pscratchpad_buff, 8, scratchpad_size, fp) != scratchpad_size)) {
+      applog(LOG_ERR, "failed to write file %s: %s", file_name_buff, strerror(errno));
+      fclose(fp);
+      unlink(file_name_buff);
+      return false;
+  }
+  fflush(fp);
+  if (do_fsync) {
+    if (fsync(fileno(fp)) == -1) {
+      applog(LOG_ERR, "failed to fsync file %s: %s", file_name_buff, strerror(errno));
+      fclose(fp);
+      unlink(file_name_buff);
+      return false;
+    }
+  }
+  if (fclose(fp) == EOF) {
+    applog(LOG_ERR, "failed to write file %s: %s", file_name_buff, strerror(errno));
+    unlink(file_name_buff);
+    return false;
+  }
+  ret = rename(file_name_buff, scratchpad_file);
+  if (ret == -1) {
+    applog(LOG_ERR, "failed to rename %s to %s: %s",
+      file_name_buff, scratchpad_file, strerror(errno));
+    unlink(file_name_buff);
+    return false;
+  }
+  applog(LOG_DEBUG, "saved scratchpad to %s (%zu+%zu bytes)", scratchpad_file,
+    sizeof(current_scratchpad_hi), (size_t)scratchpad_size * 8);
+  return true;
+}
+
+/* TODO: repetitive error+log spam handling */
+  bool load_scratchpad_from_file(char *fname)
+{
+  FILE *fp;
+  long flen;
+  size_t szhi = sizeof(scratchpad_file_header);
+
+  fp = fopen(fname, "rb");
+  if (fp == NULL) 
+  {
+    if (errno != ENOENT) {
+      applog(LOG_ERR, "failed to load %s: %s", fname, strerror(errno));
+    }
+    return false;
+  }
+  /*if (fseek(fp, 0, SEEK_END) == -1) 
+  {
+    applog(LOG_ERR, "failed to seek %s: %s", fname, strerror(errno));
+    fclose(fp);
+    return false;
+  }
+  flen = ftell(fp);*/
+  scratchpad_file_header fh = {0};
+  if ((fread(&fh, sizeof(fh), 1, fp) != 1))
+  {
+      applog(LOG_ERR, "read error from %s: %s", fname, strerror(errno));
+      fclose(fp);
+      return false;
+  }
+
+
+  if ((fh.scratchpad_size/8 > (WILD_KECCAK_SCRATCHPAD_BUFFSIZE)) ||(fh.scratchpad_size%4)) 
+  {
+    applog(LOG_ERR, "file %s size invalid (%" PRIu64 "), max=%zu",
+      fname, fh.scratchpad_size/8, WILD_KECCAK_SCRATCHPAD_BUFFSIZE);
+    fclose(fp);
+    return false;
+  }
+  
+  if (fread(pscratchpad_buff, 8,  fh.scratchpad_size, fp) != fh.scratchpad_size)
+  {
+      applog(LOG_ERR, "read error from %s: %s", fname, strerror(errno));
+      fclose(fp);
+      return false;
+  }
+  scratchpad_size = fh.scratchpad_size;
+  applog(LOG_DEBUG, "loaded scratchpad %s (%ld bytes), height=%" PRIu64, fname, flen, current_scratchpad_hi.height);
+  fclose(fp);
+  return true;
+}
+
+
+
+
+bool dump_scratchpad_to_file_debug()
 {
   FILE *fp;
   char file_name_buff[1000] = {0};
-  sprintf(file_name_buff, "scrastchpad_%lld_%s.scr", current_scratchpad_hi.height, last_found_nonce);
+  snprintf(file_name_buff, sizeof(file_name_buff), "scratchpad_%" PRIu64 "_%s.scr",
+    current_scratchpad_hi.height, last_found_nonce);
+
+  /* do not bother rewriting if it exists already */
+
 
   fp=fopen(file_name_buff, "w");
   if(fp == NULL)
   {
-    applog(LOG_INFO, "failed  to save file %s", file_name_buff);
+    applog(LOG_INFO, "failed to open file %s: %s", file_name_buff, strerror(errno));
     return false;
   }
-  fwrite(pscratchpad_buff, 8, scratchpad_size, fp);
+  if (fwrite(pscratchpad_buff, 8, scratchpad_size, fp) != scratchpad_size) {
+    applog(LOG_ERR, "failed to write file %s: %s", file_name_buff, strerror(errno));
+    fclose(fp);
+    return false;
+  }
+  if (fclose(fp) == EOF) {
+    applog(LOG_ERR, "failed to write file %s: %s", file_name_buff, strerror(errno));
+    return false;
+  }
+
   fclose(fp);
   return true;
 }
@@ -1951,9 +2070,20 @@ static void *stratum_thread(void *userdata) {
             stratum_disconnect(&stratum);
             applog(LOG_ERR, "Failed...retry after %d seconds", opt_fail_pause);
             sleep(opt_fail_pause);
-          }
-          
+          }          
         }
+
+        if(opt_algo == ALGO_WILD_KECCAK)
+        {
+          /* save every 12 hours */
+          if ((time(NULL) - prev_save) > 12*3600) 
+          {
+            store_scratchpad_to_file(false);
+            prev_save = time(NULL);
+          }
+        }
+        
+
 
         if(opt_algo == ALGO_WILD_KECCAK && !scratchpad_size)
         {
@@ -2347,6 +2477,9 @@ int main(int argc, char *argv[]) {
         applog(LOG_ERR, "scratchpad allocation failed");
         return 1;
       }
+      //try to load scratchpad from file 
+      load_scratchpad_from_file(scratchpad_file);
+
     }
 
 

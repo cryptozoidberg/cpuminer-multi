@@ -226,18 +226,30 @@ extern bool jsonrpc_2;
 extern char rpc2_id[65];
 
 #define WILD_KECCAK_SCRATCHPAD_BUFFSIZE  1000000000  //100MB
-struct scratchpad_hi
+struct  __attribute__((__packed__)) scratchpad_hi
 {
   unsigned char prevhash[32];
   uint64_t height;
 };
 
 #define WILD_KECCAK_ADDENDUMS_ARRAY_SIZE  10
-struct addendums_array_entry
+
+
+
+struct __attribute__((__packed__)) addendums_array_entry
 {
   struct scratchpad_hi prev_hi;
   uint64_t add_size;
 };
+
+
+struct __attribute__((__packed__)) scratchpad_file_header
+{
+  scratchpad_hi current_hi;
+  addendums_array_entry add_arr[WILD_KECCAK_ADDENDUMS_ARRAY_SIZE];
+  uint64_t scratchpad_size;
+};
+
 
 extern volatile bool stratum_have_work;
 extern uint64_t* pscratchpad_buff;

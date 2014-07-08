@@ -92,14 +92,10 @@ void applog(int prio, const char *fmt, ...)
 		char *f;
 		int len;
 		time_t now;
-		struct tm tm, *tm_p;
+		struct tm tm;
 
 		time(&now);
-
-		pthread_mutex_lock(&applog_lock);
-		tm_p = localtime(&now);
-		memcpy(&tm, tm_p, sizeof(tm));
-		pthread_mutex_unlock(&applog_lock);
+    localtime_r(&now, &tm);
 
 		len = 40 + strlen(fmt) + 2;
 		f = alloca(len);
@@ -1023,7 +1019,7 @@ bool stratum_request_job(struct stratum_ctx *sctx)
 
   if(jsonrpc_2) 
   {
-    sprintf(s, "{\"method\": \"getjob\", \"params\": {\"id\": \"%s\", \"hi\": { \"height\": %d, \"block_id\": \"%s\" }, \"agent\": \"cpuminer-multi/0.1\"}, \"id\": 1}",
+    sprintf(s, "{\"method\": \"getjob\", \"params\": {\"id\": \"%s\", \"hi\": { \"height\": %" PRIu64 ", \"block_id\": \"%s\" }, \"agent\": \"cpuminer-multi/0.1\"}, \"id\": 1}",
        rpc2_id, current_scratchpad_hi.height, bin2hex((const unsigned char*)current_scratchpad_hi.prevhash, 32));
     
   }else
@@ -1081,8 +1077,8 @@ bool stratum_authorize(struct stratum_ctx *sctx, const char *user, const char *p
 
 	if(jsonrpc_2) {
         s = malloc(300 + strlen(user) + strlen(pass));
-        sprintf(s, "{\"method\": \"login\", \"params\": {\"login\": \"%s\", \"pass\": \"%s\", \"hi\": { \"height\": %d, \"block_id\": \"%s\" }, \"agent\": \"cpuminer-multi/0.1\"}, \"id\": 1}",
-                                                                                    user, pass, current_scratchpad_hi.height, bin2hex((const unsigned char*)current_scratchpad_hi.prevhash, 32));
+        sprintf(s, "{\"method\": \"login\", \"params\": {\"login\": \"%s\", \"pass\": \"%s\", \"hi\": { \"height\": %" PRIu64 ", \"block_id\": \"%s\" }, \"agent\": \"cpuminer-multi/0.1\"}, \"id\": 1}",
+                                        user, pass, current_scratchpad_hi.height, bin2hex((const unsigned char*)current_scratchpad_hi.prevhash, 32));
 	} else {
         s = malloc(80 + strlen(user) + strlen(pass));
         sprintf(s, "{\"id\": 2, \"method\": \"mining.authorize\", \"params\": [\"%s\", \"%s\"]}",
