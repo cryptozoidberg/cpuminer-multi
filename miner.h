@@ -32,7 +32,7 @@
 #  ifdef  __cplusplus
 extern "C"
 #  endif
-void *alloca (size_t);
+    void *alloca (size_t);
 # endif
 #endif
 
@@ -40,11 +40,11 @@ void *alloca (size_t);
 #include <syslog.h>
 #else
 enum {
-	LOG_ERR,
-	LOG_WARNING,
-	LOG_NOTICE,
-	LOG_INFO,
-	LOG_DEBUG,
+    LOG_ERR,
+    LOG_WARNING,
+    LOG_NOTICE,
+    LOG_INFO,
+    LOG_DEBUG,
 };
 #endif
 
@@ -66,15 +66,15 @@ enum {
 #define WANT_BUILTIN_BSWAP
 #else
 #define bswap_32(x) ((((x) << 24) & 0xff000000u) | (((x) << 8) & 0x00ff0000u) \
-                   | (((x) >> 8) & 0x0000ff00u) | (((x) >> 24) & 0x000000ffu))
+    | (((x) >> 8) & 0x0000ff00u) | (((x) >> 24) & 0x000000ffu))
 #endif
 
 static inline uint32_t swab32(uint32_t v)
 {
 #ifdef WANT_BUILTIN_BSWAP
-	return __builtin_bswap32(v);
+    return __builtin_bswap32(v);
 #else
-	return bswap_32(v);
+    return bswap_32(v);
 #endif
 }
 
@@ -85,40 +85,40 @@ static inline uint32_t swab32(uint32_t v)
 #if !HAVE_DECL_BE32DEC
 static inline uint32_t be32dec(const void *pp)
 {
-	const uint8_t *p = (uint8_t const *)pp;
-	return ((uint32_t)(p[3]) + ((uint32_t)(p[2]) << 8) +
-	    ((uint32_t)(p[1]) << 16) + ((uint32_t)(p[0]) << 24));
+    const uint8_t *p = (uint8_t const *)pp;
+    return ((uint32_t)(p[3]) + ((uint32_t)(p[2]) << 8) +
+        ((uint32_t)(p[1]) << 16) + ((uint32_t)(p[0]) << 24));
 }
 #endif
 
 #if !HAVE_DECL_LE32DEC
 static inline uint32_t le32dec(const void *pp)
 {
-	const uint8_t *p = (uint8_t const *)pp;
-	return ((uint32_t)(p[0]) + ((uint32_t)(p[1]) << 8) +
-	    ((uint32_t)(p[2]) << 16) + ((uint32_t)(p[3]) << 24));
+    const uint8_t *p = (uint8_t const *)pp;
+    return ((uint32_t)(p[0]) + ((uint32_t)(p[1]) << 8) +
+        ((uint32_t)(p[2]) << 16) + ((uint32_t)(p[3]) << 24));
 }
 #endif
 
 #if !HAVE_DECL_BE32ENC
 static inline void be32enc(void *pp, uint32_t x)
 {
-	uint8_t *p = (uint8_t *)pp;
-	p[3] = x & 0xff;
-	p[2] = (x >> 8) & 0xff;
-	p[1] = (x >> 16) & 0xff;
-	p[0] = (x >> 24) & 0xff;
+    uint8_t *p = (uint8_t *)pp;
+    p[3] = x & 0xff;
+    p[2] = (x >> 8) & 0xff;
+    p[1] = (x >> 16) & 0xff;
+    p[0] = (x >> 24) & 0xff;
 }
 #endif
 
 #if !HAVE_DECL_LE32ENC
 static inline void le32enc(void *pp, uint32_t x)
 {
-	uint8_t *p = (uint8_t *)pp;
-	p[0] = x & 0xff;
-	p[1] = (x >> 8) & 0xff;
-	p[2] = (x >> 16) & 0xff;
-	p[3] = (x >> 24) & 0xff;
+    uint8_t *p = (uint8_t *)pp;
+    p[0] = x & 0xff;
+    p[1] = (x >> 8) & 0xff;
+    p[2] = (x >> 16) & 0xff;
+    p[3] = (x >> 24) & 0xff;
 }
 #endif
 
@@ -149,60 +149,60 @@ void sha256_transform_8way(uint32_t *state, const uint32_t *block, int swap);
 #endif
 
 extern int scanhash_sha256d(int thr_id, uint32_t *pdata,
-	const uint32_t *ptarget, uint32_t max_nonce, unsigned long *hashes_done);
+                            const uint32_t *ptarget, uint32_t max_nonce, unsigned long *hashes_done);
 
 extern unsigned char *scrypt_buffer_alloc();
 extern int scanhash_scrypt(int thr_id, uint32_t *pdata,
-	unsigned char *scratchbuf, const uint32_t *ptarget,
-	uint32_t max_nonce, unsigned long *hashes_done);
+                           unsigned char *scratchbuf, const uint32_t *ptarget,
+                           uint32_t max_nonce, unsigned long *hashes_done);
 
 extern int scanhash_keccak(int thr_id, uint32_t *pdata,
-    const uint32_t *ptarget, uint32_t max_nonce, unsigned long *hashes_done);
+                           const uint32_t *ptarget, uint32_t max_nonce, unsigned long *hashes_done);
 
 extern int scanhash_heavy(int thr_id, uint32_t *pdata, const uint32_t *ptarget,
-                          	uint32_t max_nonce, unsigned long *hashes_done);
+                          uint32_t max_nonce, unsigned long *hashes_done);
 
 extern int scanhash_quark(int thr_id, uint32_t *pdata, const uint32_t *ptarget,
-                        	uint32_t max_nonce, unsigned long *hashes_done);
+                          uint32_t max_nonce, unsigned long *hashes_done);
 
 extern void init_quarkhash_contexts();
 
 extern int scanhash_skein(int thr_id, uint32_t *pdata, const uint32_t *ptarget,
-       	uint32_t max_nonce, unsigned long *hashes_done);
+                          uint32_t max_nonce, unsigned long *hashes_done);
 
 extern int scanhash_ink(int thr_id, uint32_t *pdata, const uint32_t *ptarget,
-       	uint32_t max_nonce, unsigned long *hashes_done);
+                        uint32_t max_nonce, unsigned long *hashes_done);
 
 extern void init_blakehash_contexts();
 
 extern int scanhash_blake(int thr_id, uint32_t *pdata, const uint32_t *ptarget,
-	uint32_t max_nonce, unsigned long *hashes_done);
+                          uint32_t max_nonce, unsigned long *hashes_done);
 
 extern int scanhash_x11(int thr_id, uint32_t *pdata, const uint32_t *ptarget,
-	uint32_t max_nonce, unsigned long *hashes_done);
+                        uint32_t max_nonce, unsigned long *hashes_done);
 
 extern void cryptonight_hash(void* output, const void* input, size_t input_len);
 
 extern int scanhash_cryptonight(int thr_id, uint32_t *pdata, const uint32_t *ptarget,
-		uint32_t max_nonce, unsigned long *hashes_done);
+                                uint32_t max_nonce, unsigned long *hashes_done);
 
 
 
 extern void wild_keccak_hash_dbl_use_global_scratch(const uint8_t *in, size_t inlen, uint8_t *md);
 
 extern int scanhash_wildkeccak(int thr_id, uint32_t *pdata, const uint32_t *ptarget,
-                                uint32_t max_nonce, unsigned long *hashes_done);
+                               uint32_t max_nonce, unsigned long *hashes_done);
 
 
 struct thr_info {
-	int		id;
-	pthread_t	pth;
-	struct thread_q	*q;
+    int		id;
+    pthread_t	pth;
+    struct thread_q	*q;
 };
 
 struct work_restart {
-	volatile unsigned long	restart;
-	char			padding[128 - sizeof(unsigned long)];
+    volatile unsigned long	restart;
+    char			padding[128 - sizeof(unsigned long)];
 };
 
 extern bool opt_debug;
@@ -228,8 +228,8 @@ extern char rpc2_id[65];
 #define WILD_KECCAK_SCRATCHPAD_BUFFSIZE  1000000000  //100MB
 struct  __attribute__((__packed__)) scratchpad_hi
 {
-  unsigned char prevhash[32];
-  uint64_t height;
+    unsigned char prevhash[32];
+    uint64_t height;
 };
 
 #define WILD_KECCAK_ADDENDUMS_ARRAY_SIZE  10
@@ -238,16 +238,16 @@ struct  __attribute__((__packed__)) scratchpad_hi
 
 struct __attribute__((__packed__)) addendums_array_entry
 {
-  struct scratchpad_hi prev_hi;
-  uint64_t add_size;
+    struct scratchpad_hi prev_hi;
+    uint64_t add_size;
 };
 
 
 struct __attribute__((__packed__)) scratchpad_file_header
 {
-  struct scratchpad_hi current_hi;
-  struct addendums_array_entry add_arr[WILD_KECCAK_ADDENDUMS_ARRAY_SIZE];
-  uint64_t scratchpad_size;
+    struct scratchpad_hi current_hi;
+    struct addendums_array_entry add_arr[WILD_KECCAK_ADDENDUMS_ARRAY_SIZE];
+    uint64_t scratchpad_size;
 };
 
 
@@ -262,12 +262,12 @@ extern struct scratchpad_hi current_scratchpad_hi;
 
 extern void applog(int prio, const char *fmt, ...);
 extern json_t *json_rpc_call(CURL *curl, const char *url, const char *userpass,
-	const char *rpc_req, int *curl_err, int flags);
+                             const char *rpc_req, int *curl_err, int flags);
 extern char *bin2hex(const unsigned char *p, size_t len);
 extern bool hex2bin(unsigned char *p, const char *hexstr, size_t len);
 extern size_t hex2bin_len(unsigned char *p, const char *hexstr, size_t len);
 extern int timeval_subtract(struct timeval *result, struct timeval *x,
-	struct timeval *y);
+struct timeval *y);
 extern bool fulltest(const uint32_t *hash, const uint32_t *target);
 extern void diff_to_target(uint32_t *target, double diff);
 extern bool rpc2_getfullscratchpad_decode(const json_t *val);
@@ -283,40 +283,40 @@ struct work {
 };
 
 struct stratum_job {
-	char *job_id;
-	unsigned char prevhash[32];
-	size_t coinbase_size;
-	unsigned char *coinbase;
-	unsigned char *xnonce2;
-	int merkle_count;
-	unsigned char **merkle;
-	unsigned char version[4];
-	unsigned char nbits[4];
-	unsigned char ntime[4];
-	bool clean;
-	double diff;
+    char *job_id;
+    unsigned char prevhash[32];
+    size_t coinbase_size;
+    unsigned char *coinbase;
+    unsigned char *xnonce2;
+    int merkle_count;
+    unsigned char **merkle;
+    unsigned char version[4];
+    unsigned char nbits[4];
+    unsigned char ntime[4];
+    bool clean;
+    double diff;
 };
 
 struct stratum_ctx {
-	char *url;
+    char *url;
 
-	CURL *curl;
-	char *curl_url;
-	char curl_err_str[CURL_ERROR_SIZE];
-	curl_socket_t sock;
-	size_t sockbuf_size;
-	char *sockbuf;
-	pthread_mutex_t sock_lock;
+    CURL *curl;
+    char *curl_url;
+    char curl_err_str[CURL_ERROR_SIZE];
+    curl_socket_t sock;
+    size_t sockbuf_size;
+    char *sockbuf;
+    pthread_mutex_t sock_lock;
 
-	double next_diff;
+    double next_diff;
 
-	char *session_id;
-	size_t xnonce1_size;
-	unsigned char *xnonce1;
-	size_t xnonce2_size;
-	struct stratum_job job;
-	struct work work;
-	pthread_mutex_t work_lock;
+    char *session_id;
+    size_t xnonce1_size;
+    unsigned char *xnonce1;
+    size_t xnonce2_size;
+    struct stratum_job job;
+    struct work work;
+    pthread_mutex_t work_lock;
 };
 
 bool stratum_socket_full(struct stratum_ctx *sctx, int timeout);
