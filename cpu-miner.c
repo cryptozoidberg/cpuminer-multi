@@ -1902,13 +1902,7 @@ bool load_scratchpad_from_file(const char *fname)
         }
         return false;
     }
-    /*if (fseek(fp, 0, SEEK_END) == -1) 
-    {
-    applog(LOG_ERR, "failed to seek %s: %s", fname, strerror(errno));
-    fclose(fp);
-    return false;
-    }
-    flen = ftell(fp);*/
+
     struct scratchpad_file_header fh = {0};
     if ((fread(&fh, sizeof(fh), 1, fp) != 1))
     {
@@ -1935,6 +1929,7 @@ bool load_scratchpad_from_file(const char *fname)
     scratchpad_size = fh.scratchpad_size;
     current_scratchpad_hi = fh.current_hi;
     memcpy(&add_arr[0], &fh.add_arr[0], sizeof(fh.add_arr));
+    flen = (long)scratchpad_size*8;
 
     applog(LOG_DEBUG, "loaded scratchpad %s (%ld bytes), height=%" PRIu64, fname, flen, current_scratchpad_hi.height);
     fclose(fp);
