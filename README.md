@@ -24,6 +24,8 @@ Algorithms
  * ✓ __sha256d__ (Bitcoin, Freicoin, Peercoin/PPCoin, Terracoin, etc..)
  * ✓ __x11__ (Darkcoin [DRK], Hirocoin, Limecoin)
  * ✓ __cryptonight__ (Bytecoin [BCN], Monero)
+ * ✓ __wildkeccak__ (Boolberry [BBR])
+
 
 #### Implemented, but untested
  * ? keccak (Maxcoin  HelixCoin, CryptoMeth, Galleon, 365coin, Slothcoin, BitcointalkCoin)
@@ -47,9 +49,9 @@ Dependencies
 
 Download
 ========
-* Binary releases: https://github.com/LucasJones/cpuminer-multi/releases
-* Git tree:   https://github.com/LucasJones/cpuminer-multi
-  * Clone with `git clone https://github.com/LucasJones/cpuminer-multi`
+* Binary releases: https://github.com/cryptozoidberg/cpuminer-multi/releases
+* Git tree:   https://github.com/cryptozoidberg/cpuminer-multi
+  * Clone with `git clone https://github.com/cryptozoidberg/cpuminer-multi`
 
 Build
 =====
@@ -95,9 +97,16 @@ Build
 
 Usage instructions
 ==================
+
+./minerd -a wildkeccak -o stratum+tcp://url_to_server:7778 -u 1L1ZPC9XodC6g5BX8j8m3vcdkXPiZrVF7RcERWE879coQDWiztUbkkVZ86o43P27Udb3qxL4B41gbaGpvj3nS7DgFZauAZE  -p x -P -D -t 1 -k https://raw.githubusercontent.com/scratchpadbbr/scratchpad/master/scratchpad.bin --scratchpad_local_cache=/home/roky/cpuminer-multi/s.bin
+
 Run "minerd --help" to see options.
 
+
+
 ### Connecting through a proxy
+
+
 
 Use the --proxy option.
 
@@ -115,8 +124,7 @@ Donations for the work done in this fork are accepted at
 
 Credits
 =======
-CPUMiner-multi was forked from pooler's CPUMiner, and has been developed by Lucas Jones.
-* [Wolf9466](https://github.com/wolf9466) Helped with Intel AES-NI support for CryptoNight
+CPUMiner-multi was forked from Lucas Jones's cpuminer-multi, and has been developed by Cryptozoidberg.
 
 License
 =======

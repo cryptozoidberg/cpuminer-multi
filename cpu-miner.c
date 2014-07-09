@@ -180,7 +180,8 @@ struct scratchpad_hi current_scratchpad_hi = {0};
 static struct addendums_array_entry add_arr[WILD_KECCAK_ADDENDUMS_ARRAY_SIZE] = {0};
 static char last_found_nonce[200] = "";
 static time_t prev_save = 0;
-
+static const char * pscratchpad_url = NULL;
+static const char * pscratchpad_local_cache = NULL;
 
 
 pthread_mutex_t applog_lock;
@@ -220,6 +221,8 @@ static char const usage[] =
     x11          X11\n\
     cryptonight  CryptoNight\n\
     wildkeccak   WildKeccak\n\
+    -k  --scratchpad=URL  URL of inital scratchpad file\n\
+    -l  --scratchpad_local_cache=PATH  PATH to local scratchpad file\n\
     -o, --url=URL         URL of mining server\n\
     -O, --userpass=U:P    username:password pair for mining server\n\
     -u, --user=USERNAME   username for mining server\n\
@@ -261,7 +264,7 @@ static char const short_options[] =
 #ifdef HAVE_SYSLOG_H
     "S"
 #endif
-    "a:c:Dhp:Px:qr:R:s:t:T:o:u:O:V";
+    "a:c:Dhp:Px:qr:R:s:t:T:o:u:O:V:k:l";
 
 static struct option const options[] = {
     { "algo", 1, NULL, 'a' },
@@ -269,6 +272,8 @@ static struct option const options[] = {
     { "background", 0, NULL, 'B' },
 #endif
     { "benchmark", 0, NULL, 1005 },
+    { "scratchpad", 1, NULL, 'k'},
+    { "scratchpad_local_cache", 1, NULL, 'l'},
     { "cert", 1, NULL, 1001 },
     { "config", 1, NULL, 'c' },
     { "debug", 0, NULL, 'D' },
@@ -1833,7 +1838,7 @@ bool store_scratchpad_to_file(bool do_fsync)
 
     if(opt_algo != ALGO_WILD_KECCAK || !scratchpad_size) return true;
 
-    snprintf(file_name_buff, sizeof(file_name_buff), "%s.tmp", scratchpad_file);
+    snprintf(file_name_buff, sizeof(file_name_buff), "%s.tmp", pscratchpad_local_cache);
     unlink(file_name_buff);
     fp = fopen(file_name_buff, "wbx");
     if(fp == NULL)
@@ -1870,20 +1875,20 @@ bool store_scratchpad_to_file(bool do_fsync)
         unlink(file_name_buff);
         return false;
     }
-    ret = rename(file_name_buff, scratchpad_file);
+    ret = rename(file_name_buff, pscratchpad_local_cache);
     if (ret == -1) {
         applog(LOG_ERR, "failed to rename %s to %s: %s",
-            file_name_buff, scratchpad_file, strerror(errno));
+            file_name_buff, pscratchpad_local_cache, strerror(errno));
         unlink(file_name_buff);
         return false;
     }
-    applog(LOG_DEBUG, "saved scratchpad to %s (%zu+%zu bytes)", scratchpad_file,
+    applog(LOG_DEBUG, "saved scratchpad to %s (%zu+%zu bytes)", pscratchpad_local_cache,
         sizeof(struct scratchpad_file_header), (size_t)scratchpad_size * 8);
     return true;
 }
 
 /* TODO: repetitive error+log spam handling */
-bool load_scratchpad_from_file(char *fname)
+bool load_scratchpad_from_file(const char *fname)
 {
     FILE *fp;
     long flen;
@@ -2242,6 +2247,12 @@ static void parse_arg(int key, char *arg) {
             show_usage_and_exit(1);
         }
         break;
+    case 'k':
+        pscratchpad_url = arg;
+        break;
+    case 'l':
+        pscratchpad_local_cache = arg;
+        break;
     case 'B':
         opt_background = true;
         break;
@@ -2475,6 +2486,50 @@ static void signal_handler(int sig) {
 }
 #endif
 
+size_t write_data(void *ptr, size_t size, size_t nmemb, FILE *stream) 
+{
+    size_t written = fwrite(ptr, size, nmemb, stream);
+    return written;
+}
+
+bool download_inital_scratchpad(const char* path_to, const char* url)
+{
+    applog(LOG_INFO, "Downloading scratchpad....");
+    CURL *curl;
+    FILE *fp;
+    CURLcode res;
+    char curl_error_buff[CURL_ERROR_SIZE] = {0};
+    curl = curl_easy_init();
+    if (curl) {
+        fp = fopen(path_to,"wb");
+        curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, curl_error_buff);
+        curl_easy_setopt(curl, CURLOPT_URL, url);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_data);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp);
+        res = curl_easy_perform(curl);
+        if(CURLE_OK != res)
+        {
+            applog(LOG_ERR, "Failed to download file, error: %s", curl_error_buff);
+        }else
+        {
+            applog(LOG_INFO, "Scratchpad downloaded OK.");
+        }
+
+        /* always cleanup */
+        curl_easy_cleanup(curl);
+        fclose(fp);
+        if(CURLE_OK != res)
+        {
+            return false;
+        }
+    }else
+    {
+        applog(LOG_INFO, "Failed to curl_easy_init.");
+        return false;
+    }
+    return true;
+}
+
 int main(int argc, char *argv[]) {
     struct thr_info *thr;
     long flags;
@@ -2499,18 +2554,23 @@ int main(int argc, char *argv[]) {
         char cachedir[PATH_MAX];      
         jsonrpc_2 = true;
         //TODO: add windows version code here
-        if (!getenv("HOME")) {
-            applog(LOG_ERR, "$HOME not set");
-            return 1;
+        if(!pscratchpad_local_cache)
+        {
+            if (!getenv("HOME")) {
+                applog(LOG_ERR, "$HOME not set");
+                return 1;
+            }
+            if (!try_mkdir_chdir(getenv("HOME")) || !try_mkdir_chdir(".cache") || !try_mkdir_chdir(cachedir_suffix))
+                return 1;
+            if (getcwd(cachedir, sizeof(cachedir) - 22) == NULL) {
+                applog(LOG_ERR, "getcwd failed: %s", strerror(errno));
+                return 1;
+            }
+            snprintf(scratchpad_file, sizeof(scratchpad_file), "%s/scratchpad.bin", cachedir);
+            pscratchpad_local_cache = scratchpad_file;
         }
-        if (!try_mkdir_chdir(getenv("HOME")) || !try_mkdir_chdir(".cache") || !try_mkdir_chdir(cachedir_suffix))
-            return 1;
-        if (getcwd(cachedir, sizeof(cachedir) - 22) == NULL) {
-            applog(LOG_ERR, "getcwd failed: %s", strerror(errno));
-            return 1;
-        }
-        snprintf(scratchpad_file, sizeof(scratchpad_file), "%s/scratchpad.bin", cachedir);
-        applog(LOG_DEBUG, "wildkeccak scratchpad cache %s", scratchpad_file);
+
+        applog(LOG_DEBUG, "wildkeccak scratchpad cache %s", pscratchpad_local_cache);
 
 
 
@@ -2531,7 +2591,25 @@ int main(int argc, char *argv[]) {
             applog(LOG_INFO, "using hugetlb");
         }
         //try to load scratchpad from file 
-        load_scratchpad_from_file(scratchpad_file);
+        if(!load_scratchpad_from_file(pscratchpad_local_cache))
+        {
+            if(!pscratchpad_url)
+            {
+                applog(LOG_ERR, "Scratchpad URL not set. Please specify correct scratchpad url by -k or --scratchpad option");
+                return 1;
+            }
+            if(!download_inital_scratchpad(pscratchpad_local_cache, pscratchpad_url))
+            {
+                applog(LOG_ERR, "Scratchpad not found and not downloaded. Please specify correct scratchpad url by -k or --scratchpad  option");
+                return 1;
+            }
+            if(!load_scratchpad_from_file(pscratchpad_local_cache))
+            {
+                applog(LOG_ERR, "Failed to load scratchpad data after downloading, probably broken scratchpad link, please restart miner with correct inital scratcpad link(-k or --scratchpad )");
+                unlink(pscratchpad_local_cache);
+                return 1;
+            }
+        }
     }
 
 
