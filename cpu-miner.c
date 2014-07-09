@@ -1913,10 +1913,10 @@ bool store_scratchpad_to_file(bool do_fsync)
   }
 
 
-  if ((fh.scratchpad_size/8 > (WILD_KECCAK_SCRATCHPAD_BUFFSIZE)) ||(fh.scratchpad_size%4)) 
+  if ((fh.scratchpad_size*8 > (WILD_KECCAK_SCRATCHPAD_BUFFSIZE)) ||(fh.scratchpad_size%4)) 
   {
     applog(LOG_ERR, "file %s size invalid (%" PRIu64 "), max=%zu",
-      fname, fh.scratchpad_size/8, WILD_KECCAK_SCRATCHPAD_BUFFSIZE);
+      fname, fh.scratchpad_size*8, WILD_KECCAK_SCRATCHPAD_BUFFSIZE);
     fclose(fp);
     return false;
   }
