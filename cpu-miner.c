@@ -2045,8 +2045,10 @@ static bool stratum_handle_response(char *buf) {
                 //applog(LOG_ERR, "Dump scratchpad file");
                 //dump_scrstchpad_to_file();
             }
-
+            
             strcpy(rpc2_id, "");
+            stratum_have_work = false;
+            restart_threads();
         }
     } else {
         valid = res_val && json_is_true(res_val);
