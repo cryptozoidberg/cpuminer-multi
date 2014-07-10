@@ -2042,7 +2042,7 @@ static bool stratum_handle_response(char *buf) {
             }
             else if(perr_msg && !strcmp(perr_msg, "Low difficulty share")) 
             {
-                applog(LOG_ERR, "Dump scratchpad file");
+                //applog(LOG_ERR, "Dump scratchpad file");
                 //dump_scrstchpad_to_file();
             }
 
@@ -2095,10 +2095,12 @@ static void *stratum_thread(void *userdata) {
         }
 
         if(!strcmp(rpc2_id, ""))
-        {
-            applog(LOG_ERR, "Re-login...");
+        {            
+            applog(LOG_ERR, "Re-login, disconnecting...");
+            stratum_disconnect(&stratum);
             //not logged in, try to relogin
-            if(!stratum_authorize(&stratum, rpc_user, rpc_pass)) 
+            applog(LOG_ERR, "Re-connec... and relogin...");
+            if(!stratum_connect(&stratum, stratum.url) || !stratum_authorize(&stratum, rpc_user, rpc_pass)) 
             {
                 stratum_disconnect(&stratum);
                 applog(LOG_ERR, "Failed...retry after %d seconds", opt_fail_pause);
