@@ -2565,12 +2565,33 @@ int main(int argc, char *argv[]) {
         //TODO: add windows version code here
         if(!pscratchpad_local_cache)
         {
-            if (!getenv("HOME")) {
-                applog(LOG_ERR, "$HOME not set");
+            
+            
+#if defined(_WIN64) || defined(_WIN32)
+            const char* phome_var_name = "LOCALAPPDATA";
+#else 
+            const char* phome_var_name = "HOME";
+#endif
+            if (!getenv(phome_var_name)) 
+            {
+                applog(LOG_ERR, "$%s not set", phome_var_name);
                 return 1;
             }
-            if (!try_mkdir_chdir(getenv("HOME")) || !try_mkdir_chdir(".cache") || !try_mkdir_chdir(cachedir_suffix))
+            if (!try_mkdir_chdir(getenv(phome_var_name)) )
                 return 1;
+
+#if !defined(_WIN64) && !defined(_WIN32)
+            if (!try_mkdir_chdir(".cache") )
+            {
+                return 1;
+            }
+#endif
+
+            if(!try_mkdir_chdir(cachedir_suffix))
+            {
+                return 1;
+            }
+
             if (getcwd(cachedir, sizeof(cachedir) - 22) == NULL) {
                 applog(LOG_ERR, "getcwd failed: %s", strerror(errno));
                 return 1;
