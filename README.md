@@ -49,7 +49,7 @@ Dependencies
 
 Download
 ========
-* Binary releases: https://github.com/cryptozoidberg/cpuminer-multi/releases
+* Binary releases: http://boolberry.com/downloads.html
 * Git tree:   https://github.com/cryptozoidberg/cpuminer-multi
   * Clone with `git clone https://github.com/cryptozoidberg/cpuminer-multi`
 
