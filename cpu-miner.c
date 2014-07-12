@@ -2549,6 +2549,13 @@ int main(int argc, char *argv[]) {
 
     tzset();
 
+    pthread_mutex_init(&applog_lock, NULL );
+    pthread_mutex_init(&stats_lock, NULL );
+    pthread_mutex_init(&g_work_lock, NULL );
+    pthread_mutex_init(&rpc2_job_lock, NULL );
+    pthread_mutex_init(&stratum.sock_lock, NULL );
+    pthread_mutex_init(&stratum.work_lock, NULL );
+
     /* parse command line */
     parse_cmdline(argc, argv);
 
@@ -2658,12 +2665,7 @@ int main(int argc, char *argv[]) {
         sprintf(rpc_userpass, "%s:%s", rpc_user, rpc_pass);
     }
 
-    pthread_mutex_init(&applog_lock, NULL );
-    pthread_mutex_init(&stats_lock, NULL );
-    pthread_mutex_init(&g_work_lock, NULL );
-    pthread_mutex_init(&rpc2_job_lock, NULL );
-    pthread_mutex_init(&stratum.sock_lock, NULL );
-    pthread_mutex_init(&stratum.work_lock, NULL );
+
 
     flags = !opt_benchmark && strncmp(rpc_url, "https:", 6) ?
         (CURL_GLOBAL_ALL & ~CURL_GLOBAL_SSL) : CURL_GLOBAL_ALL;
