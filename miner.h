@@ -225,7 +225,7 @@ extern struct work_restart *work_restart;
 extern bool jsonrpc_2;
 extern char rpc2_id[65];
 
-#define WILD_KECCAK_SCRATCHPAD_BUFFSIZE  1000000000  //100MB
+#define WILD_KECCAK_SCRATCHPAD_BUFFSIZE  100000000  //100MB
 struct  __attribute__((__packed__)) scratchpad_hi
 {
     unsigned char prevhash[32];
