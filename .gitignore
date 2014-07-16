@@ -5,6 +5,10 @@ minerd.exe
 
 autom4te.cache
 .deps
+ID
+tags
+*~
+.*.swp
 
 Makefile
 Makefile.in

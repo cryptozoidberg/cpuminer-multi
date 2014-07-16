@@ -179,9 +179,9 @@ volatile uint64_t  scratchpad_size = 0;
 static char scratchpad_file[PATH_MAX];
 static const char cachedir_suffix[] = "boolberry"; /* scratchpad cache saved as ~/.cache/boolberry/scratchpad.bin */
 
-struct scratchpad_hi current_scratchpad_hi = {0};
-static struct addendums_array_entry add_arr[WILD_KECCAK_ADDENDUMS_ARRAY_SIZE] = {0};
-static char last_found_nonce[200] = "";
+struct scratchpad_hi current_scratchpad_hi;
+static struct addendums_array_entry add_arr[WILD_KECCAK_ADDENDUMS_ARRAY_SIZE];
+static char last_found_nonce[200];
 static time_t prev_save = 0;
 static const char * pscratchpad_url = NULL;
 static const char * pscratchpad_local_cache = NULL;
@@ -533,7 +533,7 @@ bool revert_scratchpad()
     //playback scratchpad addendums for whole add_arr
     size_t i_ = 0;
     size_t i = 0;
-    size_t arr_size = sizeof(add_arr)/sizeof(add_arr[0]);
+    size_t arr_size = ARRAY_SIZE(add_arr); 
 
     for(i_=0; i_ != arr_size; i_++)
     {
@@ -550,7 +550,7 @@ bool push_addendum_info(struct scratchpad_hi* pprev_hi, uint64_t size /* uint64 
 {
     //find last free entry
     size_t i = 0;
-    size_t arr_size = sizeof(add_arr)/sizeof(add_arr[0]);
+    size_t arr_size = ARRAY_SIZE(add_arr);
 
     for(i=0; i != arr_size; i++)
     {
@@ -563,7 +563,7 @@ bool push_addendum_info(struct scratchpad_hi* pprev_hi, uint64_t size /* uint64 
         memmove(&add_arr[0], &add_arr[1], (arr_size-1)*sizeof(add_arr[0]));   
         i = arr_size - 1;
     }
-    memcpy(&add_arr[i].prev_hi, pprev_hi, sizeof(add_arr[i].prev_hi));
+    add_arr[i].prev_hi = *pprev_hi;
     add_arr[i].add_size = size;
 
     return true;
@@ -571,8 +571,8 @@ bool push_addendum_info(struct scratchpad_hi* pprev_hi, uint64_t size /* uint64 
 
 bool addendum_decode(const json_t *addm)
 {
-    struct scratchpad_hi hi = {0};
-    unsigned char prevhash[32] = {0};
+    struct scratchpad_hi hi;
+    unsigned char prevhash[32];
 
     json_t* hi_section = json_object_get(addm, "hi");
     if (!hi_section)
@@ -687,7 +687,6 @@ bool addendums_decode(const json_t *job)
     unsigned int add_sz = json_array_size(paddms);
     for (int i = 0; i < add_sz; i++) 
     {
-        const char *notify;
         json_t *addm = json_array_get(paddms, i);
         if (!addm ) 
         {
@@ -871,8 +870,6 @@ err_out: return false;
 
 
 bool rpc2_getfullscratchpad_decode(const json_t *val) {
-    const char *id;
-    //const char *s;
     const char *status;
 
     json_t *res = json_object_get(val, "result");
@@ -1774,6 +1771,7 @@ start: hdr_path = tq_pop(mythr->q, NULL );
         if(jsonrpc_2) {
             pthread_mutex_lock(&rpc2_login_lock);
             if(!strcmp(rpc2_id, "")) {
+                pthread_mutex_unlock(&rpc2_login_lock);
                 sleep(1);
                 continue;
             }
@@ -2110,17 +2108,6 @@ static void *stratum_thread(void *userdata) {
             }          
         }
 
-        if(opt_algo == ALGO_WILD_KECCAK)
-        {
-            /* save every 12 hours */
-            if (scratchpad_size && (time(NULL) - prev_save) > 12*3600) 
-            {
-                store_scratchpad_to_file(false);
-                prev_save = time(NULL);
-            }
-        }        
-
-
         if(opt_algo == ALGO_WILD_KECCAK && !scratchpad_size)
         {
             if(!stratum_getscratchpad(&stratum))
@@ -2138,6 +2125,15 @@ static void *stratum_thread(void *userdata) {
                 applog(LOG_ERR, "...retry after %d seconds", opt_fail_pause);
                 sleep(opt_fail_pause);
             }
+        }
+        if(opt_algo == ALGO_WILD_KECCAK)
+        {
+          /* save every 12 hours */
+          if ((time(NULL) - prev_save) > 12*3600)
+          {
+            store_scratchpad_to_file(false);
+            prev_save = time(NULL);
+          }
         }
 
         if (jsonrpc_2) {
@@ -2609,8 +2605,6 @@ int main(int argc, char *argv[]) {
 
         applog(LOG_DEBUG, "wildkeccak scratchpad cache %s", pscratchpad_local_cache);
 
-
-
         applog(LOG_INFO, "Using JSON-RPC 2.0");
         size_t sz = WILD_KECCAK_SCRATCHPAD_BUFFSIZE;
 #if !defined(_WIN64) && !defined(_WIN32)
@@ -2664,8 +2658,6 @@ int main(int argc, char *argv[]) {
             return 1;
         sprintf(rpc_userpass, "%s:%s", rpc_user, rpc_pass);
     }
-
-
 
     flags = !opt_benchmark && strncmp(rpc_url, "https:", 6) ?
         (CURL_GLOBAL_ALL & ~CURL_GLOBAL_SSL) : CURL_GLOBAL_ALL;

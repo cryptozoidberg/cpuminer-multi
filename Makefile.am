@@ -50,9 +50,6 @@ minerd_SOURCES	= elist.h \
 		  crypto/c_skein.c \
 		  crypto/hash.c \
 		  crypto/aesb.c \
-		  wildkeccak/KeccakF-1600-opt64.c \
-		  wildkeccak/KeccakNISTInterface.c \
-		  wildkeccak/KeccakSponge.c \
 		  wildkeccak.c
 
 
@@ -65,10 +62,10 @@ endif
 if ARCH_ARM
 minerd_SOURCES += sha2-arm.S scrypt-arm.S
 endif
-minerd_LDFLAGS	= $(PTHREAD_FLAGS)
+minerd_LDFLAGS	= $(PTHREAD_FLAGS)  -pie
 minerd_LDADD	= @LIBCURL@ @JANSSON_LIBS@ @PTHREAD_LIBS@ @WS2_LIBS@
 minerd_CPPFLAGS = @LIBCURL_CPPFLAGS@
-minerd_CFLAGS   = 
+minerd_CFLAGS   = -flto -std=gnu11 -O3 -march=native -fPIC
 
 if HAVE_WINDOWS
 minerd_CFLAGS += -Wl,--stack,10485760

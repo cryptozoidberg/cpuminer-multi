@@ -58,9 +58,20 @@ enum {
 #define likely(expr) (expr)
 #endif
 
-#ifndef ARRAY_SIZE
-#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
-#endif
+/* Force a compilation error if condition is true */
+#define BUILD_BUG_ON(condition) ((void)BUILD_BUG_ON_ZERO(condition))
+
+/* Force a compilation error if condition is true, but also produce a
+   result (of value 0 and type size_t), so the expression can be used
+   e.g. in a structure initializer (or where-ever else comma expressions
+   aren't permitted). */
+#define BUILD_BUG_ON_ZERO(e) (sizeof(struct { int:-!!(e); }))
+#define BUILD_BUG_ON_NULL(e) ((void *)sizeof(struct { int:-!!(e); }))
+
+# define __same_type(a, b) __builtin_types_compatible_p(typeof(a), typeof(b))
+/* &a[0] degrades to a pointer: a different type from an array */
+#define __must_be_array(a) BUILD_BUG_ON_ZERO(__same_type((a), &(a)[0]))
+#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]) + __must_be_array(arr))
 
 #if ((__GNUC__ > 4) || (__GNUC__ == 4 && __GNUC_MINOR__ >= 3))
 #define WANT_BUILTIN_BSWAP
@@ -225,7 +236,7 @@ extern struct work_restart *work_restart;
 extern bool jsonrpc_2;
 extern char rpc2_id[65];
 
-#define WILD_KECCAK_SCRATCHPAD_BUFFSIZE  100000000  //100MB
+#define WILD_KECCAK_SCRATCHPAD_BUFFSIZE  (64<<20)
 struct  __attribute__((__packed__)) scratchpad_hi
 {
     unsigned char prevhash[32];
@@ -253,7 +264,7 @@ struct __attribute__((__packed__)) scratchpad_file_header
 
 extern volatile bool stratum_have_work;
 extern uint64_t* pscratchpad_buff;
-extern volatile uint64_t  scratchpad_size;
+extern volatile uint64_t scratchpad_size;
 extern struct scratchpad_hi current_scratchpad_hi;
 
 #define JSON_RPC_LONGPOLL	(1 << 0)
