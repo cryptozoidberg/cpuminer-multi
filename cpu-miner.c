@@ -1151,7 +1151,7 @@ static bool rpc2_login(CURL *curl) {
         return false;
     }
     json_t *val;
-    bool rc;
+    bool rc = false;
     struct timeval tv_start, tv_end, diff;
     char s[JSON_BUF_LEN];
 
