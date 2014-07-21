@@ -96,11 +96,9 @@ static inline int helper_ffs(int x)
          * We cannot do this on 32 bits because at the very least some
          * 486 CPUs did not behave this way.
          */
-        long tmp = -1;
         asm("bsfl %1,%0"
             : "=r" (r)
-            : "rm" (x), "0" (tmp));
-
+            : "rm" (x), "0" (-1));
 	return r + 1;
 }
 
@@ -128,10 +126,9 @@ static inline int fls(int x)
          * We cannot do this on 32 bits because at the very least some
          * 486 CPUs did not behave this way.
          */
-        long tmp = -1;
         asm("bsrl %1,%0"
             : "=r" (r)
-            : "rm" (x), "0" (tmp));
+            : "rm" (x), "0" (-1));
 	return r + 1;
 }
 
