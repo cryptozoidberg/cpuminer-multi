@@ -605,11 +605,11 @@ bool addendum_decode(const json_t *addm)
         if(current_scratchpad_hi.height > hi.height -1)
         {
             //skip low scratchpad
-            applog(LOG_ERR, "addendum with hi.height=%lld skiped since current_scratchpad_hi.height=%lld", hi.height, current_scratchpad_hi.height);        
+            applog(LOG_ERR, "addendum with hi.height=%lld skipped since current_scratchpad_hi.height=%lld", hi.height, current_scratchpad_hi.height);        
             return true;
         }
         //TODO: ADD SPLIT HANDLING HERE
-        applog(LOG_ERR, "JSON height in addendum-1 (%lld-1) missmatched with current_scratchpad_hi.height(%lld), reverting scratchpad and re-login", hi.height, current_scratchpad_hi.height);
+        applog(LOG_ERR, "JSON height in addendum-1 (%lld-1) mismatched with current_scratchpad_hi.height(%lld), reverting scratchpad and re-login", hi.height, current_scratchpad_hi.height);
         revert_scratchpad();
         //init re-login
         strcpy(rpc2_id, "");
@@ -2099,7 +2099,7 @@ static void *stratum_thread(void *userdata) {
             applog(LOG_ERR, "Re-login, disconnecting...");
             stratum_disconnect(&stratum);
             //not logged in, try to relogin
-            applog(LOG_ERR, "Re-connec... and relogin...");
+            applog(LOG_ERR, "Re-connect... and relogin...");
             if(!stratum_connect(&stratum, stratum.url) || !stratum_authorize(&stratum, rpc_user, rpc_pass)) 
             {
                 stratum_disconnect(&stratum);
