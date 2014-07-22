@@ -86,7 +86,6 @@ make
 ```
 
 #### Basic cross-compile instructions, compiling for win64 on Linux Fedora:
- * 
 ```sh
 yum install mingw\*
 ./autogen.sh    # only needed if building from git repo
