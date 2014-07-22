@@ -943,25 +943,11 @@ static void share_result(int result, struct work *work, const char *reason) {
     result ? accepted_count++ : rejected_count++;
     pthread_mutex_unlock(&stats_lock);
 
-    switch (opt_algo) {
-    case ALGO_CRYPTONIGHT:
-    case ALGO_WILD_KECCAK:
-        applog(LOG_INFO, "accepted: %lu/%lu (%.2f%%), %.2f h/s at diff %.0f %s",
-            accepted_count, accepted_count + rejected_count,
-            100. * accepted_count / (accepted_count + rejected_count), hashrate,
-            (((double) 0xffffffff) / (work ? work->target[7] : rpc2_target)),
-            result ? "(yay!!!)" : "(booooo)");
-        break;
-
-
-    default:
-        sprintf(s, hashrate >= 1e6 ? "%.0f" : "%.2f", 1e-3 * hashrate);
-        applog(LOG_INFO, "accepted: %lu/%lu (%.2f%%), %s khash/s %s",
-            accepted_count, accepted_count + rejected_count,
-            100. * accepted_count / (accepted_count + rejected_count), s,
-            result ? "(yay!!!)" : "(booooo)");
-        break;
-    }
+    applog(LOG_INFO, "accepted: %lu/%lu (%.2f%%), %.2f h/s at diff %.0f %s",
+           accepted_count, accepted_count + rejected_count,
+           100. * accepted_count / (accepted_count + rejected_count), hashrate,
+           (((double) 0xffffffff) / (work ? work->target[7] : rpc2_target)),
+           result ? "(yay!!!)" : "(booooo)");
 
     if (opt_debug && reason)
         applog(LOG_DEBUG, "DEBUG: reject reason: %s", reason);
@@ -973,11 +959,10 @@ static bool submit_upstream_work(CURL *curl, struct work *work) {
     char s[JSON_BUF_LEN];
     int i;
     bool rc = false;
-    size_t cmplen = (opt_algo == ALGO_WILD_KECCAK) ? 8 : 0;
 
     /* pass if the previous hash is not the current previous hash */
-    if (!submit_old && memcmp(work->data + 1 + cmplen,
-                              g_work.data + 1 + cmplen, 32)) 
+    if (!submit_old && memcmp(work->data + 1 + 8,
+                              g_work.data + 1 + 8, 32)) 
     {
         if (opt_debug)
             applog(LOG_DEBUG, "DEBUG: stale work detected, discarding");
@@ -986,24 +971,16 @@ static bool submit_upstream_work(CURL *curl, struct work *work) {
 
     if (have_stratum) {
         uint32_t ntime, nonce;
-        char *ntimestr, *noncestr = NULL, *xnonce2str;
+        char *ntimestr, *noncestr, *xnonce2str;
 
         if (jsonrpc_2) {
             char hash[32];
+            char *hashhex;
 
-            switch(opt_algo) {
-            case ALGO_WILD_KECCAK:
-                noncestr = bin2hex(((const unsigned char*)work->data) + 1, 8);
-                strcpy(last_found_nonce, noncestr);
-                wild_keccak_hash_dbl_use_global_scratch((uint8_t*)work->data, 81, (uint8_t*)hash);                
-                break;
-            case ALGO_CRYPTONIGHT:
-                noncestr = bin2hex(((const unsigned char*)work->data) + 39, 4);
-                strcpy(last_found_nonce, noncestr); 
-            default:
-                cryptonight_hash(hash, work->data, 76);
-            }
-            char *hashhex = bin2hex(hash, 32);
+            noncestr = bin2hex(((const unsigned char*)work->data) + 1, 8);
+            strcpy(last_found_nonce, noncestr);
+            wild_keccak_hash_dbl_use_global_scratch((uint8_t*)work->data, 81, (uint8_t*)hash);                
+            hashhex = bin2hex(hash, 32);
             snprintf(s, JSON_BUF_LEN,
                 "{\"method\": \"submit\", \"params\": {\"id\": \"%s\", \"job_id\": \"%s\", \"nonce\": \"%s\", \"result\": \"%s\"}, \"id\":1}\r\n",
                 rpc2_id, work->job_id, noncestr, hashhex);
@@ -1029,20 +1006,14 @@ static bool submit_upstream_work(CURL *curl, struct work *work) {
     } else {
         /* build JSON-RPC request */
         if(jsonrpc_2) {
-            char *noncestr = "";
+            char *noncestr;
             char hash[32];
-            switch(opt_algo) {
-            case ALGO_WILD_KECCAK:
-                noncestr = bin2hex(((const unsigned char*)work->data) + 1, 8);
-                strcpy(last_found_nonce, noncestr);
-                wild_keccak_hash_dbl_use_global_scratch((uint8_t*)work->data, 81, (uint8_t*)hash);
-                break;
-            case ALGO_CRYPTONIGHT:
-                noncestr = bin2hex(((const unsigned char*)work->data) + 39, 4);
-            default:
-                cryptonight_hash(hash, work->data, 76);
-            }
-            char *hashhex = bin2hex(hash, 32);
+			char *hashhex;
+
+            noncestr = bin2hex(((const unsigned char*)work->data) + 1, 8);
+            strcpy(last_found_nonce, noncestr);
+            wild_keccak_hash_dbl_use_global_scratch((uint8_t*)work->data, 81, (uint8_t*)hash);
+            hashhex = bin2hex(hash, 32);
             snprintf(s, JSON_BUF_LEN,
                 "{\"method\": \"submit\", \"params\": {\"id\": \"%s\", \"job_id\": \"%s\", \"nonce\": \"%s\", \"result\": \"%s\"}, \"id\":1}\r\n",
                 rpc2_id, work->job_id, noncestr, hashhex);
@@ -1434,10 +1405,8 @@ static void *miner_thread(void *userdata) {
 
     uint32_t *nonceptr = (uint32_t*) (((char*)work.data) + (jsonrpc_2 ? 39 : 76));
     bool wild_keccak = false;
-    if(opt_algo == ALGO_WILD_KECCAK) {
-        nonceptr = (uint32_t*) (((char*)work.data) + 1);
-        wild_keccak = true;
-    }
+    nonceptr = (uint32_t*) (((char*)work.data) + 1);
+    wild_keccak = true;
 
     //boolberry job 01000000000000000009048cc3ccbbf6de2095ac436ad08dfa2a42654e866c40bb26bde37baacf300900d684c69d0501ef58fd3722b8cf3068814c5f60fa16b75a13282270c1ece90d7939627708d43a01
     while (1) {
@@ -1526,20 +1495,7 @@ static void *miner_thread(void *userdata) {
             max64 = g_work_time + (have_longpoll ? LP_SCANTIME : opt_scantime) - time(NULL );
         max64 *= thr_hashrates[thr_id];
         if (max64 <= 0) {
-            switch (opt_algo) {
-            case ALGO_SCRYPT:
-                max64 = 0xfffLL;
-                break;
-            case ALGO_WILD_KECCAK:
                 max64 = 0x1fffffLL;
-                break;
-            case ALGO_CRYPTONIGHT:
-                max64 = 0x40LL;
-                break;
-            default:
-                max64 = 0x1fffffLL;
-                break;
-            }
         }
         if (*nonceptr + max64 > end_nonce)
             max_nonce = end_nonce;
@@ -1564,37 +1520,16 @@ static void *miner_thread(void *userdata) {
             pthread_mutex_unlock(&stats_lock);
         }
         if (!opt_quiet) {
-            switch(opt_algo) {
-            case ALGO_CRYPTONIGHT:
-                applog(LOG_INFO, "thread %d: %lu hashes, %.2f h/s", thr_id,
-                    hashes_done, thr_hashrates[thr_id]);
-                break;
-            case ALGO_WILD_KECCAK:
                 applog(LOG_INFO, "thread %d: %lu hashes, %.2f kh/s", thr_id,
                     hashes_done, 1e-3 * thr_hashrates[thr_id]);
-                break;
-            default:
-                sprintf(s, thr_hashrates[thr_id] >= 1e6 ? "%.0f" : "%.2f",
-                    1e-3 * thr_hashrates[thr_id]);
-                applog(LOG_INFO, "thread %d: %lu hashes, %.2f khash/s", thr_id,
-                    hashes_done, s);
-                break;
-            }
         }
         if (opt_benchmark && thr_id == opt_n_threads - 1) {
             double hashrate = 0.;
             for (i = 0; i < opt_n_threads && thr_hashrates[i]; i++)
                 hashrate += thr_hashrates[i];
             if (i == opt_n_threads) {
-                switch(opt_algo) {
-                case ALGO_CRYPTONIGHT:
-                    applog(LOG_INFO, "Total: %s H/s", hashrate);
-                    break;
-                default:
-                    sprintf(s, hashrate >= 1e6 ? "%.0f" : "%.2f", 1e-3 * hashrate);
-                    applog(LOG_INFO, "Total: %s khash/s", s);
-                    break;
-                }
+                sprintf(s, hashrate >= 1e6 ? "%.0f" : "%.2f", 1e-3 * hashrate);
+                applog(LOG_INFO, "Total: %s khash/s", s);
             }
         }
 
@@ -1728,7 +1663,7 @@ bool store_scratchpad_to_file(bool do_fsync)
     char file_name_buff[PATH_MAX];  
     int ret;
 
-    if(opt_algo != ALGO_WILD_KECCAK || !scratchpad_size) return true;
+    if(!scratchpad_size) return true;
 
     snprintf(file_name_buff, sizeof(file_name_buff), "%s.tmp", pscratchpad_local_cache);
     unlink(file_name_buff);
@@ -1994,7 +1929,7 @@ static void *stratum_thread(void *userdata) {
             }          
         }
 
-        if(opt_algo == ALGO_WILD_KECCAK && !scratchpad_size)
+        if(!scratchpad_size)
         {
             if(!stratum_getscratchpad(&stratum))
             {
@@ -2012,14 +1947,11 @@ static void *stratum_thread(void *userdata) {
                 sleep(opt_fail_pause);
             }
         }
-        if(opt_algo == ALGO_WILD_KECCAK)
+        /* save every 12 hours */
+        if ((time(NULL) - prev_save) > 12*3600)
         {
-          /* save every 12 hours */
-          if ((time(NULL) - prev_save) > 12*3600)
-          {
             store_scratchpad_to_file(false);
             prev_save = time(NULL);
-          }
         }
 
         if (jsonrpc_2) {
@@ -2414,6 +2346,7 @@ int main(int argc, char *argv[]) {
     struct thr_info *thr;
     long flags;
     int i;
+	char cachedir[PATH_MAX];
 
     rpc_user = strdup("");
     rpc_pass = strdup("");
@@ -2430,90 +2363,83 @@ int main(int argc, char *argv[]) {
     /* parse command line */
     parse_cmdline(argc, argv);
 
-    if(opt_algo == ALGO_WILD_KECCAK) {
-        char cachedir[PATH_MAX];      
-        jsonrpc_2 = true;
-        //TODO: add windows version code here
-        if(!pscratchpad_local_cache)
-        {
-            
-            
+	jsonrpc_2 = true;
+	if(!pscratchpad_local_cache)
+	{
 #if defined(_WIN64) || defined(_WIN32)
-            const char* phome_var_name = "LOCALAPPDATA";
+		const char* phome_var_name = "LOCALAPPDATA";
 #else 
-            const char* phome_var_name = "HOME";
+		const char* phome_var_name = "HOME";
 #endif
-            if (!getenv(phome_var_name)) 
-            {
-                applog(LOG_ERR, "$%s not set", phome_var_name);
-                return 1;
-            }
-            if (!try_mkdir_chdir(getenv(phome_var_name)) )
-                return 1;
+		if (!getenv(phome_var_name)) 
+		{
+			applog(LOG_ERR, "$%s not set", phome_var_name);
+			return 1;
+		}
+		if (!try_mkdir_chdir(getenv(phome_var_name)) )
+			return 1;
 
 #if !defined(_WIN64) && !defined(_WIN32)
-            if (!try_mkdir_chdir(".cache") )
-            {
-                return 1;
-            }
+		if (!try_mkdir_chdir(".cache") )
+		{
+			return 1;
+		}
 #endif
 
-            if(!try_mkdir_chdir(cachedir_suffix))
-            {
-                return 1;
-            }
+		if(!try_mkdir_chdir(cachedir_suffix))
+		{
+			return 1;
+		}
 
-            if (getcwd(cachedir, sizeof(cachedir) - 22) == NULL) {
-                applog(LOG_ERR, "getcwd failed: %s", strerror(errno));
-                return 1;
-            }
-            snprintf(scratchpad_file, sizeof(scratchpad_file), "%s/scratchpad.bin", cachedir);
-            pscratchpad_local_cache = scratchpad_file;
-        }
+		if (getcwd(cachedir, sizeof(cachedir) - 22) == NULL) {
+			applog(LOG_ERR, "getcwd failed: %s", strerror(errno));
+			return 1;
+		}
+		snprintf(scratchpad_file, sizeof(scratchpad_file), "%s/scratchpad.bin", cachedir);
+		pscratchpad_local_cache = scratchpad_file;
+	}
 
-        applog(LOG_DEBUG, "wildkeccak scratchpad cache %s", pscratchpad_local_cache);
+	applog(LOG_DEBUG, "wildkeccak scratchpad cache %s", pscratchpad_local_cache);
 
-        applog(LOG_INFO, "Using JSON-RPC 2.0");
-        size_t sz = WILD_KECCAK_SCRATCHPAD_BUFFSIZE;
+	applog(LOG_INFO, "Using JSON-RPC 2.0");
+	size_t sz = WILD_KECCAK_SCRATCHPAD_BUFFSIZE;
 #if !defined(_WIN64) && !defined(_WIN32)
-        pscratchpad_buff = mmap(0, sz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS |
-            MAP_HUGETLB | MAP_POPULATE, 0, 0);
-        if(MAP_FAILED == pscratchpad_buff)      
-        {
-            applog(LOG_INFO, "hugetlb not available");
+	pscratchpad_buff = mmap(0, sz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS |
+		MAP_HUGETLB | MAP_POPULATE, 0, 0);
+	if(MAP_FAILED == pscratchpad_buff)      
+	{
+		applog(LOG_INFO, "hugetlb not available");
 #endif
-            pscratchpad_buff = malloc(sz);
-            if(!pscratchpad_buff)
-            {
-                applog(LOG_ERR, "scratchpad allocation failed");
-                return 1;
-            }
+		pscratchpad_buff = malloc(sz);
+		if(!pscratchpad_buff)
+		{
+			applog(LOG_ERR, "scratchpad allocation failed");
+			return 1;
+		}
 #if !defined(_WIN64) && !defined(_WIN32)
-        } else {
-            applog(LOG_INFO, "using hugetlb");
-        }
+	} else {
+		applog(LOG_INFO, "using hugetlb");
+	}
 #endif        //try to load scratchpad from file 
-        if(!load_scratchpad_from_file(pscratchpad_local_cache))
-        {
-            if(!pscratchpad_url)
-            {
-                applog(LOG_ERR, "Scratchpad URL not set. Please specify correct scratchpad url by -k or --scratchpad option");
-                return 1;
-            }
-            if(!download_inital_scratchpad(pscratchpad_local_cache, pscratchpad_url))
-            {
-                applog(LOG_ERR, "Scratchpad not found and not downloaded. Please specify correct scratchpad url by -k or --scratchpad  option");
-                return 1;
-            }
-            if(!load_scratchpad_from_file(pscratchpad_local_cache))
-            {
-                applog(LOG_ERR, "Failed to load scratchpad data after downloading, probably broken scratchpad link, please restart miner with correct inital scratcpad link(-k or --scratchpad )");
-                unlink(pscratchpad_local_cache);
-                return 1;
-            }
-        }
-    }
-
+	if(!load_scratchpad_from_file(pscratchpad_local_cache))
+	{
+		if(!pscratchpad_url)
+		{
+			applog(LOG_ERR, "Scratchpad URL not set. Please specify correct scratchpad url by -k or --scratchpad option");
+			return 1;
+		}
+		if(!download_inital_scratchpad(pscratchpad_local_cache, pscratchpad_url))
+		{
+			applog(LOG_ERR, "Scratchpad not found and not downloaded. Please specify correct scratchpad url by -k or --scratchpad  option");
+			return 1;
+		}
+		if(!load_scratchpad_from_file(pscratchpad_local_cache))
+		{
+			applog(LOG_ERR, "Failed to load scratchpad data after downloading, probably broken scratchpad link, please restart miner with correct inital scratcpad link(-k or --scratchpad )");
+			unlink(pscratchpad_local_cache);
+			return 1;
+		}
+	}
 
     if (!opt_benchmark && !rpc_url) {
         fprintf(stderr, "%s: no URL supplied\n", argv[0]);
