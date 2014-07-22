@@ -118,9 +118,10 @@ When the --proxy option is not used, the program honors the http_proxy and all_p
 
 Donations
 =========
-Donations for the work done in this fork are accepted at
-* MRO: `472haywQKoxFzf7asaQ4XKBc2foAY4ezk8HiN63ifW4iAbJiLnfmJfhHSR9XmVKw2WYPnszJV9MEHj9Z5WMK9VCNHaGLDmJ`
-* BTC: `139QWoktddChHsZMWZFxmBva4FM96X2dhE`
+Donations for the work done in this fork by otila are accepted at
+* MRO: `46i538G1mrxAjzvP7cqKNufPoYAmmZyX5NidEcpmEjqgGB8F8vmRax3SuipJ3zkEkkFYQHjM58zDeXyoNgxVVGby4JMGwZt`
+* BBR: `@anonymous`
+* BTC: `1Gpa1DteQozR4Mw94mjZRGb6McaNT6nrTC`
 
 Credits
 =======
