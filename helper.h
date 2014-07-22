@@ -83,10 +83,10 @@
 #define __always_inline         inline __attribute__((always_inline))
 #endif
 
-#define uninitialized_var(x) x = x
-
 #if defined(__clang__)
 #define uninitialized_var(x) x = *(&(x))
+#else
+#define uninitialized_var(x) x = x
 #endif
 
 #if defined(__INTEL_COMPILER)

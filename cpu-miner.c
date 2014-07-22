@@ -973,33 +973,24 @@ static bool submit_upstream_work(CURL *curl, struct work *work) {
     char s[JSON_BUF_LEN];
     int i;
     bool rc = false;
+    size_t cmplen = (opt_algo == ALGO_WILD_KECCAK) ? 8 : 0;
 
     /* pass if the previous hash is not the current previous hash */
-    if(opt_algo == ALGO_WILD_KECCAK) 
+    if (!submit_old && memcmp(work->data + 1 + cmplen,
+                              g_work.data + 1 + cmplen, 32)) 
     {
-        if (!submit_old && memcmp(work->data + 1 + 8, g_work.data + 1 + 8, 32)) 
-        {
-            if (opt_debug)
-                applog(LOG_DEBUG, "DEBUG: stale work detected, discarding");
-            return true;
-        }
-    }else
-    {
-        if (!submit_old && memcmp(work->data + 1, g_work.data + 1, 32)) 
-        {
-            if (opt_debug)
-                applog(LOG_DEBUG, "DEBUG: stale work detected, discarding");
-            return true;
-        }
+        if (opt_debug)
+            applog(LOG_DEBUG, "DEBUG: stale work detected, discarding");
+        return true;
     }
 
     if (have_stratum) {
         uint32_t ntime, nonce;
-        char *ntimestr, *noncestr, *xnonce2str;
+        char *ntimestr, *noncestr = NULL, *xnonce2str;
 
         if (jsonrpc_2) {
-
             char hash[32];
+
             switch(opt_algo) {
             case ALGO_WILD_KECCAK:
                 noncestr = bin2hex(((const unsigned char*)work->data) + 1, 8);
@@ -1895,8 +1886,6 @@ bool store_scratchpad_to_file(bool do_fsync)
 bool load_scratchpad_from_file(const char *fname)
 {
     FILE *fp;
-    long flen;
-    size_t szhi = sizeof(struct scratchpad_file_header);
 
     fp = fopen(fname, "rb");
     if (fp == NULL) 
@@ -1933,9 +1922,9 @@ bool load_scratchpad_from_file(const char *fname)
     scratchpad_size = fh.scratchpad_size;
     current_scratchpad_hi = fh.current_hi;
     memcpy(&add_arr[0], &fh.add_arr[0], sizeof(fh.add_arr));
-    flen = (long)scratchpad_size*8;
 
-    applog(LOG_DEBUG, "loaded scratchpad %s (%ld bytes), height=%" PRIu64, fname, flen, current_scratchpad_hi.height);
+    applog(LOG_DEBUG, "loaded scratchpad %s (%zu bytes), height=%" PRIu64, fname, 
+           scratchpad_size*8, current_scratchpad_hi.height);
     fclose(fp);
     prev_save = time(NULL);
     return true;
