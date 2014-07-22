@@ -659,8 +659,10 @@ bool addendum_decode(const json_t *addm)
     uint64_t old_height = current_scratchpad_hi.height;
     current_scratchpad_hi = hi;
 
-
-    applog(LOG_INFO, "ADDENDUM APPLIED: %lld --> %lld  %lld blocks added", old_height, current_scratchpad_hi.height, add_len/64);
+    if (!opt_quiet) {
+        applog(LOG_INFO, "ADDENDUM APPLIED: %lld --> %lld  %lld blocks added",
+               old_height, current_scratchpad_hi.height, add_len/64);
+    }
     return true;
 
 err_out:
@@ -762,7 +764,9 @@ bool rpc2_job_decode(const json_t *job, struct work *work)
             pthread_mutex_unlock(&stats_lock);
 
             double difficulty = (((double) 0xffffffff) / target);
-            applog(LOG_INFO, "Pool set diff to %.0f", difficulty);
+            if (!opt_quiet) {
+                applog(LOG_INFO, "Pool set diff to %.0f", difficulty);
+            }
             rpc2_target = target;
         }
 
@@ -1397,9 +1401,10 @@ static void *miner_thread(void *userdata) {
     /* Cpu affinity only makes sense if the number of threads is a multiple
     * of the number of CPUs */
     if (num_processors > 1 && opt_n_threads % num_processors == 0) {
-        if (!opt_quiet)
-            applog(LOG_INFO, "Binding thread %d to cpu %d", thr_id,
-            thr_id % num_processors);
+        if (!opt_quiet) {
+            applog(LOG_INFO, "Binding thread %d to cpu %d",
+                   thr_id, thr_id % num_processors);
+        }
         affine_to_cpu(thr_id, thr_id % num_processors);
     }
 
@@ -1475,7 +1480,6 @@ static void *miner_thread(void *userdata) {
         {
             if (memcmp(((uint8_t*) work.data) + 1 + 8, ((uint8_t*) g_work.data) + 1 + 8, 80-9)) 
             {
-                applog(LOG_ERR, "reloading job");
                 work_free(&work);
                 work_copy(&work, &g_work);
                 nonceptr = (uint32_t*) (((char*)work.data) + 1);
@@ -1502,7 +1506,10 @@ static void *miner_thread(void *userdata) {
         else
             max_nonce = *nonceptr + max64;
 
-        applog(LOG_INFO, "Thread %d is going to scan with start nonce=%08x, end_nonce=%08x", thr_id, *nonceptr, max_nonce);
+        if (!opt_quiet) {
+            applog(LOG_INFO, "Thread %d is going to scan with start nonce=%08x, end_nonce=%08x",
+                   thr_id, *nonceptr, max_nonce);
+        }
 
         hashes_done = 0;
         gettimeofday(&tv_start, NULL );
@@ -1520,8 +1527,8 @@ static void *miner_thread(void *userdata) {
             pthread_mutex_unlock(&stats_lock);
         }
         if (!opt_quiet) {
-                applog(LOG_INFO, "thread %d: %lu hashes, %.2f kh/s", thr_id,
-                    hashes_done, 1e-3 * thr_hashrates[thr_id]);
+                applog(LOG_INFO, "thread %d: %lu hashes, %.2f kh/s",
+                       thr_id, hashes_done, 1e-3 * thr_hashrates[thr_id]);
         }
         if (opt_benchmark && thr_id == opt_n_threads - 1) {
             double hashrate = 0.;
