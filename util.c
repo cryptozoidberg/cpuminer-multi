@@ -975,7 +975,7 @@ bool stratum_getscratchpad(struct stratum_ctx *sctx) {
     json_t *val = NULL, *res_val, *err_val;
     char *s, *sret;
     json_error_t err;
-    //bool ret = false;
+    bool ret = false;
 
     s = malloc(1000);
     sprintf(s, "{\"method\": \"getfullscratchpad\", \"params\": {\"id\": \"%s\", \"agent\": \"cpuminer-multi/0.1\"}, \"id\": 1}", rpc2_id);
@@ -998,8 +998,7 @@ bool stratum_getscratchpad(struct stratum_ctx *sctx) {
 
     applog(LOG_DEBUG, "Getting full scratchpad parsed line");
 
-    bool ret = rpc2_getfullscratchpad_decode(val);  
-
+    ret = rpc2_getfullscratchpad_decode(val);  
 
 out:
     free(s);

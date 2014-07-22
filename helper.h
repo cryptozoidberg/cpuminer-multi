@@ -79,6 +79,26 @@
 #endif
 #define __maybe_unused                  __attribute__((unused))
 #define __always_unused                 __attribute__((unused))
+#ifndef __always_inline
+#define __always_inline         inline __attribute__((always_inline))
+#endif
+
+#if defined(__clang__)
+#define uninitialized_var(x) x = *(&(x))
+#else
+#define uninitialized_var(x) x = x
+#endif
+
+#if defined(__INTEL_COMPILER)
+/* Intel ECC compiler doesn't support __builtin_types_compatible_p() */
+#define __must_be_array(a) 0
+
+#ifndef __HAVE_BUILTIN_BSWAP16__
+/* icc has this, but it's called _bswap16 */
+#define __HAVE_BUILTIN_BSWAP16__
+#define __builtin_bswap16 _bswap16
+#endif
+#endif
 
 #ifndef offsetof
 #define offsetof(___TYPE, ___MEMBER) __builtin_offsetof(___TYPE, ___MEMBER)

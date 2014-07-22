@@ -605,11 +605,11 @@ bool addendum_decode(const json_t *addm)
         if(current_scratchpad_hi.height > hi.height -1)
         {
             //skip low scratchpad
-            applog(LOG_ERR, "addendum with hi.height=%lld skiped since current_scratchpad_hi.height=%lld", hi.height, current_scratchpad_hi.height);        
+            applog(LOG_ERR, "addendum with hi.height=%lld skipped since current_scratchpad_hi.height=%lld", hi.height, current_scratchpad_hi.height);        
             return true;
         }
         //TODO: ADD SPLIT HANDLING HERE
-        applog(LOG_ERR, "JSON height in addendum-1 (%lld-1) missmatched with current_scratchpad_hi.height(%lld), reverting scratchpad and re-login", hi.height, current_scratchpad_hi.height);
+        applog(LOG_ERR, "JSON height in addendum-1 (%lld-1) mismatched with current_scratchpad_hi.height(%lld), reverting scratchpad and re-login", hi.height, current_scratchpad_hi.height);
         revert_scratchpad();
         //init re-login
         strcpy(rpc2_id, "");
@@ -659,8 +659,10 @@ bool addendum_decode(const json_t *addm)
     uint64_t old_height = current_scratchpad_hi.height;
     current_scratchpad_hi = hi;
 
-
-    applog(LOG_INFO, "ADDENDUM APPLIED: %lld --> %lld  %lld blocks added", old_height, current_scratchpad_hi.height, add_len/64);
+    if (!opt_quiet) {
+        applog(LOG_INFO, "ADDENDUM APPLIED: %lld --> %lld  %lld blocks added",
+               old_height, current_scratchpad_hi.height, add_len/64);
+    }
     return true;
 
 err_out:
@@ -762,7 +764,9 @@ bool rpc2_job_decode(const json_t *job, struct work *work)
             pthread_mutex_unlock(&stats_lock);
 
             double difficulty = (((double) 0xffffffff) / target);
-            applog(LOG_INFO, "Pool set diff to %.0f", difficulty);
+            if (!opt_quiet) {
+                applog(LOG_INFO, "Pool set diff to %.0f", difficulty);
+            }
             rpc2_target = target;
         }
 
@@ -933,7 +937,6 @@ err_out: return false;
 }
 
 static void share_result(int result, struct work *work, const char *reason) {
-    char s[345];
     double hashrate = 0.0;
     int i;
 
@@ -943,25 +946,11 @@ static void share_result(int result, struct work *work, const char *reason) {
     result ? accepted_count++ : rejected_count++;
     pthread_mutex_unlock(&stats_lock);
 
-    switch (opt_algo) {
-    case ALGO_CRYPTONIGHT:
-    case ALGO_WILD_KECCAK:
-        applog(LOG_INFO, "accepted: %lu/%lu (%.2f%%), %.2f h/s at diff %.0f %s",
-            accepted_count, accepted_count + rejected_count,
-            100. * accepted_count / (accepted_count + rejected_count), hashrate,
-            (((double) 0xffffffff) / (work ? work->target[7] : rpc2_target)),
-            result ? "(yay!!!)" : "(booooo)");
-        break;
-
-
-    default:
-        sprintf(s, hashrate >= 1e6 ? "%.0f" : "%.2f", 1e-3 * hashrate);
-        applog(LOG_INFO, "accepted: %lu/%lu (%.2f%%), %s khash/s %s",
-            accepted_count, accepted_count + rejected_count,
-            100. * accepted_count / (accepted_count + rejected_count), s,
-            result ? "(yay!!!)" : "(booooo)");
-        break;
-    }
+    applog(LOG_INFO, "accepted: %lu/%lu (%.2f%%), %.2f h/s at diff %.0f %s",
+           accepted_count, accepted_count + rejected_count,
+           100. * accepted_count / (accepted_count + rejected_count), hashrate,
+           (((double) 0xffffffff) / (work ? work->target[7] : rpc2_target)),
+           result ? "(yay!!!)" : "(booooo)");
 
     if (opt_debug && reason)
         applog(LOG_DEBUG, "DEBUG: reject reason: %s", reason);
@@ -975,22 +964,12 @@ static bool submit_upstream_work(CURL *curl, struct work *work) {
     bool rc = false;
 
     /* pass if the previous hash is not the current previous hash */
-    if(opt_algo == ALGO_WILD_KECCAK) 
+    if (!submit_old && memcmp(work->data + 1 + 8,
+                              g_work.data + 1 + 8, 32)) 
     {
-        if (!submit_old && memcmp(work->data + 1 + 8, g_work.data + 1 + 8, 32)) 
-        {
-            if (opt_debug)
-                applog(LOG_DEBUG, "DEBUG: stale work detected, discarding");
-            return true;
-        }
-    }else
-    {
-        if (!submit_old && memcmp(work->data + 1, g_work.data + 1, 32)) 
-        {
-            if (opt_debug)
-                applog(LOG_DEBUG, "DEBUG: stale work detected, discarding");
-            return true;
-        }
+        if (opt_debug)
+            applog(LOG_DEBUG, "DEBUG: stale work detected, discarding");
+        return true;
     }
 
     if (have_stratum) {
@@ -998,21 +977,13 @@ static bool submit_upstream_work(CURL *curl, struct work *work) {
         char *ntimestr, *noncestr, *xnonce2str;
 
         if (jsonrpc_2) {
-
             char hash[32];
-            switch(opt_algo) {
-            case ALGO_WILD_KECCAK:
-                noncestr = bin2hex(((const unsigned char*)work->data) + 1, 8);
-                strcpy(last_found_nonce, noncestr);
-                wild_keccak_hash_dbl_use_global_scratch((uint8_t*)work->data, 81, (uint8_t*)hash);                
-                break;
-            case ALGO_CRYPTONIGHT:
-                noncestr = bin2hex(((const unsigned char*)work->data) + 39, 4);
-                strcpy(last_found_nonce, noncestr); 
-            default:
-                cryptonight_hash(hash, work->data, 76);
-            }
-            char *hashhex = bin2hex(hash, 32);
+            char *hashhex;
+
+            noncestr = bin2hex(((const unsigned char*)work->data) + 1, 8);
+            strcpy(last_found_nonce, noncestr);
+            wild_keccak_hash_dbl_use_global_scratch((uint8_t*)work->data, 81, (uint8_t*)hash);                
+            hashhex = bin2hex(hash, 32);
             snprintf(s, JSON_BUF_LEN,
                 "{\"method\": \"submit\", \"params\": {\"id\": \"%s\", \"job_id\": \"%s\", \"nonce\": \"%s\", \"result\": \"%s\"}, \"id\":1}\r\n",
                 rpc2_id, work->job_id, noncestr, hashhex);
@@ -1038,20 +1009,14 @@ static bool submit_upstream_work(CURL *curl, struct work *work) {
     } else {
         /* build JSON-RPC request */
         if(jsonrpc_2) {
-            char *noncestr = "";
+            char *noncestr;
             char hash[32];
-            switch(opt_algo) {
-            case ALGO_WILD_KECCAK:
-                noncestr = bin2hex(((const unsigned char*)work->data) + 1, 8);
-                strcpy(last_found_nonce, noncestr);
-                wild_keccak_hash_dbl_use_global_scratch((uint8_t*)work->data, 81, (uint8_t*)hash);
-                break;
-            case ALGO_CRYPTONIGHT:
-                noncestr = bin2hex(((const unsigned char*)work->data) + 39, 4);
-            default:
-                cryptonight_hash(hash, work->data, 76);
-            }
-            char *hashhex = bin2hex(hash, 32);
+			char *hashhex;
+
+            noncestr = bin2hex(((const unsigned char*)work->data) + 1, 8);
+            strcpy(last_found_nonce, noncestr);
+            wild_keccak_hash_dbl_use_global_scratch((uint8_t*)work->data, 81, (uint8_t*)hash);
+            hashhex = bin2hex(hash, 32);
             snprintf(s, JSON_BUF_LEN,
                 "{\"method\": \"submit\", \"params\": {\"id\": \"%s\", \"job_id\": \"%s\", \"nonce\": \"%s\", \"result\": \"%s\"}, \"id\":1}\r\n",
                 rpc2_id, work->job_id, noncestr, hashhex);
@@ -1151,7 +1116,7 @@ static bool rpc2_login(CURL *curl) {
         return false;
     }
     json_t *val;
-    bool rc;
+    bool rc = false;
     struct timeval tv_start, tv_end, diff;
     char s[JSON_BUF_LEN];
 
@@ -1403,15 +1368,11 @@ err_out: workio_cmd_free(wc);
 }
 
 static void stratum_gen_work(struct stratum_ctx *sctx, struct work *work) {
-    unsigned char merkle_root[64];
-    int i;
-
     pthread_mutex_lock(&sctx->work_lock);
-
-	free(work->job_id);
-	memcpy(work, &sctx->work, sizeof(struct work));
-	work->job_id = strdup(sctx->work.job_id);
-	pthread_mutex_unlock(&sctx->work_lock);
+    free(work->job_id);
+    memcpy(work, &sctx->work, sizeof(struct work));
+    work->job_id = strdup(sctx->work.job_id);
+    pthread_mutex_unlock(&sctx->work_lock);
 }
 
 static void *miner_thread(void *userdata) {
@@ -1420,7 +1381,6 @@ static void *miner_thread(void *userdata) {
     struct work work = { { 0 } };
     uint32_t max_nonce;
     uint32_t end_nonce = 0xffffffffU / opt_n_threads * (thr_id + 1) - 0x20;
-    unsigned char *scratchbuf = NULL;
     char s[16];
     int i;
 
@@ -1435,18 +1395,15 @@ static void *miner_thread(void *userdata) {
     /* Cpu affinity only makes sense if the number of threads is a multiple
     * of the number of CPUs */
     if (num_processors > 1 && opt_n_threads % num_processors == 0) {
-        if (!opt_quiet)
-            applog(LOG_INFO, "Binding thread %d to cpu %d", thr_id,
-            thr_id % num_processors);
+        if (!opt_quiet) {
+            applog(LOG_INFO, "Binding thread %d to cpu %d",
+                   thr_id, thr_id % num_processors);
+        }
         affine_to_cpu(thr_id, thr_id % num_processors);
     }
 
     uint32_t *nonceptr = (uint32_t*) (((char*)work.data) + (jsonrpc_2 ? 39 : 76));
-    bool wild_keccak = false;
-    if(opt_algo == ALGO_WILD_KECCAK) {
-        nonceptr = (uint32_t*) (((char*)work.data) + 1);
-        wild_keccak = true;
-    }
+    nonceptr = (uint32_t*) (((char*)work.data) + 1);
 
     //boolberry job 01000000000000000009048cc3ccbbf6de2095ac436ad08dfa2a42654e866c40bb26bde37baacf300900d684c69d0501ef58fd3722b8cf3068814c5f60fa16b75a13282270c1ece90d7939627708d43a01
     while (1) {
@@ -1456,74 +1413,43 @@ static void *miner_thread(void *userdata) {
         int rc;
 
         if (have_stratum) {
-            while (!scratchpad_size || !stratum_have_work || (!jsonrpc_2 && time(NULL) >= g_work_time + 120))
+            while (!scratchpad_size || !stratum_have_work ||
+                  (!jsonrpc_2 && time(NULL) >= g_work_time + 120)) {
                 sleep(1);
-            pthread_mutex_lock(&g_work_lock);
-            if(!wild_keccak)
-            {
-                if ((*nonceptr) >= end_nonce && !(jsonrpc_2 ? memcmp(work.data, g_work.data, 39) || memcmp(((uint8_t*) work.data) + 43, ((uint8_t*) g_work.data) + 43, 33) 
-                    : 
-                    memcmp(work.data, g_work.data, 76)
-                    )
-                    )
-                {
-                    stratum_gen_work(&stratum, &g_work);
-                }
-            }else
-            {
-                if ((*nonceptr) >= end_nonce && !(jsonrpc_2 ? memcmp(((uint8_t*) work.data) + 1 + 8, ((uint8_t*) g_work.data) + 1 + 8, 80-9):memcmp(work.data, g_work.data, 80)
-                    )
-                    )
-                {
-                    stratum_gen_work(&stratum, &g_work);
-                }
-
             }
-
+            pthread_mutex_lock(&g_work_lock);
+            if ((*nonceptr) >= end_nonce && !(jsonrpc_2 ? memcmp(((uint8_t*) work.data) + 1 + 8,
+                                            ((uint8_t*) g_work.data) + 1 + 8, 80-9) :
+                                            memcmp(work.data, g_work.data, 80))) {
+                stratum_gen_work(&stratum, &g_work);
+            }
         } else {
             /* obtain new work from internal workio thread */
             pthread_mutex_lock(&g_work_lock);
-            if ((!have_stratum
-                && (!have_longpoll
-                || time(NULL ) >= g_work_time + LP_SCANTIME * 3 / 4
-                || *nonceptr >= end_nonce))) {
-                    if (unlikely(!get_work(mythr, &g_work))) {
-                        applog(LOG_ERR, "work retrieval failed, exiting "
-                            "mining thread %d", mythr->id);
-                        pthread_mutex_unlock(&g_work_lock);
-                        goto out;
-                    }
-                    g_work_time = have_stratum ? 0 : time(NULL );
+            if ((!have_stratum && (!have_longpoll ||
+                 time(NULL ) >= g_work_time + LP_SCANTIME * 3 / 4 ||
+                 *nonceptr >= end_nonce))) {
+                if (unlikely(!get_work(mythr, &g_work))) {
+                    applog(LOG_ERR, "work retrieval failed, exiting "
+                           "mining thread %d", mythr->id);
+                    pthread_mutex_unlock(&g_work_lock);
+                    goto out;
+                }
+                g_work_time = have_stratum ? 0 : time(NULL );
             }
             if (have_stratum) {
                 pthread_mutex_unlock(&g_work_lock);
                 continue;
             }
         }
-        if(!wild_keccak)
-        {
-            if (jsonrpc_2 ? memcmp(work.data, g_work.data, 39) || memcmp(((uint8_t*) work.data) + 43, ((uint8_t*) g_work.data) + 43, 33) : memcmp(work.data, g_work.data, 76)) 
-            {
-                work_free(&work);
-                work_copy(&work, &g_work);
-                nonceptr = (uint32_t*) (((char*)work.data) + (jsonrpc_2 ? 39 : 76));
-                *nonceptr = 0xffffffffU / opt_n_threads * thr_id;
-            } else
-                ++(*nonceptr);
-
-        }else
-        {
-            if (memcmp(((uint8_t*) work.data) + 1 + 8, ((uint8_t*) g_work.data) + 1 + 8, 80-9)) 
-            {
-                applog(LOG_ERR, "reloading job");
-                work_free(&work);
-                work_copy(&work, &g_work);
-                nonceptr = (uint32_t*) (((char*)work.data) + 1);
-                *nonceptr = 0xffffffffU / opt_n_threads * thr_id;
-            } else
-                ++(*nonceptr);
+        if (memcmp(((uint8_t*) work.data) + 1 + 8, ((uint8_t*) g_work.data) + 1 + 8, 80-9)) {
+            work_free(&work);
+            work_copy(&work, &g_work);
+            nonceptr = (uint32_t*) (((char*)work.data) + 1);
+            *nonceptr = 0xffffffffU / opt_n_threads * thr_id;
+        } else {
+            ++(*nonceptr);
         }
-
 
         pthread_mutex_unlock(&g_work_lock);
         work_restart[thr_id].restart = 0;
@@ -1535,27 +1461,17 @@ static void *miner_thread(void *userdata) {
             max64 = g_work_time + (have_longpoll ? LP_SCANTIME : opt_scantime) - time(NULL );
         max64 *= thr_hashrates[thr_id];
         if (max64 <= 0) {
-            switch (opt_algo) {
-            case ALGO_SCRYPT:
-                max64 = 0xfffLL;
-                break;
-            case ALGO_WILD_KECCAK:
                 max64 = 0x1fffffLL;
-                break;
-            case ALGO_CRYPTONIGHT:
-                max64 = 0x40LL;
-                break;
-            default:
-                max64 = 0x1fffffLL;
-                break;
-            }
         }
         if (*nonceptr + max64 > end_nonce)
             max_nonce = end_nonce;
         else
             max_nonce = *nonceptr + max64;
 
-        applog(LOG_INFO, "Thread %d is going to scan with start nonce=%08x, end_nonce=%08x", thr_id, *nonceptr, max_nonce);
+        if (!opt_quiet) {
+            applog(LOG_INFO, "Thread %d is going to scan with start nonce=%08x, end_nonce=%08x",
+                   thr_id, *nonceptr, max_nonce);
+        }
 
         hashes_done = 0;
         gettimeofday(&tv_start, NULL );
@@ -1573,37 +1489,16 @@ static void *miner_thread(void *userdata) {
             pthread_mutex_unlock(&stats_lock);
         }
         if (!opt_quiet) {
-            switch(opt_algo) {
-            case ALGO_CRYPTONIGHT:
-                applog(LOG_INFO, "thread %d: %lu hashes, %.2f h/s", thr_id,
-                    hashes_done, thr_hashrates[thr_id]);
-                break;
-            case ALGO_WILD_KECCAK:
-                applog(LOG_INFO, "thread %d: %lu hashes, %.2f kh/s", thr_id,
-                    hashes_done, 1e-3 * thr_hashrates[thr_id]);
-                break;
-            default:
-                sprintf(s, thr_hashrates[thr_id] >= 1e6 ? "%.0f" : "%.2f",
-                    1e-3 * thr_hashrates[thr_id]);
-                applog(LOG_INFO, "thread %d: %lu hashes, %.2f khash/s", thr_id,
-                    hashes_done, s);
-                break;
-            }
+                applog(LOG_INFO, "thread %d: %lu hashes, %.2f kh/s",
+                       thr_id, hashes_done, 1e-3 * thr_hashrates[thr_id]);
         }
         if (opt_benchmark && thr_id == opt_n_threads - 1) {
             double hashrate = 0.;
             for (i = 0; i < opt_n_threads && thr_hashrates[i]; i++)
                 hashrate += thr_hashrates[i];
             if (i == opt_n_threads) {
-                switch(opt_algo) {
-                case ALGO_CRYPTONIGHT:
-                    applog(LOG_INFO, "Total: %s H/s", hashrate);
-                    break;
-                default:
-                    sprintf(s, hashrate >= 1e6 ? "%.0f" : "%.2f", 1e-3 * hashrate);
-                    applog(LOG_INFO, "Total: %s khash/s", s);
-                    break;
-                }
+                sprintf(s, hashrate >= 1e6 ? "%.0f" : "%.2f", 1e-3 * hashrate);
+                applog(LOG_INFO, "Total: %s khash/s", s);
             }
         }
 
@@ -1737,7 +1632,7 @@ bool store_scratchpad_to_file(bool do_fsync)
     char file_name_buff[PATH_MAX];  
     int ret;
 
-    if(opt_algo != ALGO_WILD_KECCAK || !scratchpad_size) return true;
+    if(!scratchpad_size) return true;
 
     snprintf(file_name_buff, sizeof(file_name_buff), "%s.tmp", pscratchpad_local_cache);
     unlink(file_name_buff);
@@ -1792,8 +1687,6 @@ bool store_scratchpad_to_file(bool do_fsync)
 bool load_scratchpad_from_file(const char *fname)
 {
     FILE *fp;
-    long flen;
-    size_t szhi = sizeof(struct scratchpad_file_header);
 
     fp = fopen(fname, "rb");
     if (fp == NULL) 
@@ -1830,9 +1723,9 @@ bool load_scratchpad_from_file(const char *fname)
     scratchpad_size = fh.scratchpad_size;
     current_scratchpad_hi = fh.current_hi;
     memcpy(&add_arr[0], &fh.add_arr[0], sizeof(fh.add_arr));
-    flen = (long)scratchpad_size*8;
 
-    applog(LOG_DEBUG, "loaded scratchpad %s (%ld bytes), height=%" PRIu64, fname, flen, current_scratchpad_hi.height);
+    applog(LOG_DEBUG, "loaded scratchpad %s (%zu bytes), height=%" PRIu64, fname, 
+           scratchpad_size*8, current_scratchpad_hi.height);
     fclose(fp);
     prev_save = time(NULL);
     return true;
@@ -1996,7 +1889,7 @@ static void *stratum_thread(void *userdata) {
             applog(LOG_ERR, "Re-login, disconnecting...");
             stratum_disconnect(&stratum);
             //not logged in, try to relogin
-            applog(LOG_ERR, "Re-connec... and relogin...");
+            applog(LOG_ERR, "Re-connect... and relogin...");
             if(!stratum_connect(&stratum, stratum.url) || !stratum_authorize(&stratum, rpc_user, rpc_pass)) 
             {
                 stratum_disconnect(&stratum);
@@ -2005,7 +1898,7 @@ static void *stratum_thread(void *userdata) {
             }          
         }
 
-        if(opt_algo == ALGO_WILD_KECCAK && !scratchpad_size)
+        if(!scratchpad_size)
         {
             if(!stratum_getscratchpad(&stratum))
             {
@@ -2023,14 +1916,11 @@ static void *stratum_thread(void *userdata) {
                 sleep(opt_fail_pause);
             }
         }
-        if(opt_algo == ALGO_WILD_KECCAK)
+        /* save every 12 hours */
+        if ((time(NULL) - prev_save) > 12*3600)
         {
-          /* save every 12 hours */
-          if ((time(NULL) - prev_save) > 12*3600)
-          {
             store_scratchpad_to_file(false);
             prev_save = time(NULL);
-          }
         }
 
         if (jsonrpc_2) {
@@ -2132,7 +2022,7 @@ static void show_usage_and_exit(int status) {
 
 static void parse_arg(int key, char *arg) {
     char *p;
-    int v, i;
+    int v;
 
     switch (key) {
     case 'a':
@@ -2425,6 +2315,7 @@ int main(int argc, char *argv[]) {
     struct thr_info *thr;
     long flags;
     int i;
+	char cachedir[PATH_MAX];
 
     rpc_user = strdup("");
     rpc_pass = strdup("");
@@ -2441,90 +2332,83 @@ int main(int argc, char *argv[]) {
     /* parse command line */
     parse_cmdline(argc, argv);
 
-    if(opt_algo == ALGO_WILD_KECCAK) {
-        char cachedir[PATH_MAX];      
-        jsonrpc_2 = true;
-        //TODO: add windows version code here
-        if(!pscratchpad_local_cache)
-        {
-            
-            
+	jsonrpc_2 = true;
+	if(!pscratchpad_local_cache)
+	{
 #if defined(_WIN64) || defined(_WIN32)
-            const char* phome_var_name = "LOCALAPPDATA";
+		const char* phome_var_name = "LOCALAPPDATA";
 #else 
-            const char* phome_var_name = "HOME";
+		const char* phome_var_name = "HOME";
 #endif
-            if (!getenv(phome_var_name)) 
-            {
-                applog(LOG_ERR, "$%s not set", phome_var_name);
-                return 1;
-            }
-            if (!try_mkdir_chdir(getenv(phome_var_name)) )
-                return 1;
+		if (!getenv(phome_var_name)) 
+		{
+			applog(LOG_ERR, "$%s not set", phome_var_name);
+			return 1;
+		}
+		if (!try_mkdir_chdir(getenv(phome_var_name)) )
+			return 1;
 
 #if !defined(_WIN64) && !defined(_WIN32)
-            if (!try_mkdir_chdir(".cache") )
-            {
-                return 1;
-            }
+		if (!try_mkdir_chdir(".cache") )
+		{
+			return 1;
+		}
 #endif
 
-            if(!try_mkdir_chdir(cachedir_suffix))
-            {
-                return 1;
-            }
+		if(!try_mkdir_chdir(cachedir_suffix))
+		{
+			return 1;
+		}
 
-            if (getcwd(cachedir, sizeof(cachedir) - 22) == NULL) {
-                applog(LOG_ERR, "getcwd failed: %s", strerror(errno));
-                return 1;
-            }
-            snprintf(scratchpad_file, sizeof(scratchpad_file), "%s/scratchpad.bin", cachedir);
-            pscratchpad_local_cache = scratchpad_file;
-        }
+		if (getcwd(cachedir, sizeof(cachedir) - 22) == NULL) {
+			applog(LOG_ERR, "getcwd failed: %s", strerror(errno));
+			return 1;
+		}
+		snprintf(scratchpad_file, sizeof(scratchpad_file), "%s/scratchpad.bin", cachedir);
+		pscratchpad_local_cache = scratchpad_file;
+	}
 
-        applog(LOG_DEBUG, "wildkeccak scratchpad cache %s", pscratchpad_local_cache);
+	applog(LOG_DEBUG, "wildkeccak scratchpad cache %s", pscratchpad_local_cache);
 
-        applog(LOG_INFO, "Using JSON-RPC 2.0");
-        size_t sz = WILD_KECCAK_SCRATCHPAD_BUFFSIZE;
+	applog(LOG_INFO, "Using JSON-RPC 2.0");
+	size_t sz = WILD_KECCAK_SCRATCHPAD_BUFFSIZE;
 #if !defined(_WIN64) && !defined(_WIN32)
-        pscratchpad_buff = mmap(0, sz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS |
-            MAP_HUGETLB | MAP_POPULATE, 0, 0);
-        if(MAP_FAILED == pscratchpad_buff)      
-        {
-            applog(LOG_INFO, "hugetlb not available");
+	pscratchpad_buff = mmap(0, sz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS |
+		MAP_HUGETLB | MAP_POPULATE, 0, 0);
+	if(MAP_FAILED == pscratchpad_buff)      
+	{
+		applog(LOG_INFO, "hugetlb not available");
 #endif
-            pscratchpad_buff = malloc(sz);
-            if(!pscratchpad_buff)
-            {
-                applog(LOG_ERR, "scratchpad allocation failed");
-                return 1;
-            }
+		pscratchpad_buff = malloc(sz);
+		if(!pscratchpad_buff)
+		{
+			applog(LOG_ERR, "scratchpad allocation failed");
+			return 1;
+		}
 #if !defined(_WIN64) && !defined(_WIN32)
-        } else {
-            applog(LOG_INFO, "using hugetlb");
-        }
+	} else {
+		applog(LOG_INFO, "using hugetlb");
+	}
 #endif        //try to load scratchpad from file 
-        if(!load_scratchpad_from_file(pscratchpad_local_cache))
-        {
-            if(!pscratchpad_url)
-            {
-                applog(LOG_ERR, "Scratchpad URL not set. Please specify correct scratchpad url by -k or --scratchpad option");
-                return 1;
-            }
-            if(!download_inital_scratchpad(pscratchpad_local_cache, pscratchpad_url))
-            {
-                applog(LOG_ERR, "Scratchpad not found and not downloaded. Please specify correct scratchpad url by -k or --scratchpad  option");
-                return 1;
-            }
-            if(!load_scratchpad_from_file(pscratchpad_local_cache))
-            {
-                applog(LOG_ERR, "Failed to load scratchpad data after downloading, probably broken scratchpad link, please restart miner with correct inital scratcpad link(-k or --scratchpad )");
-                unlink(pscratchpad_local_cache);
-                return 1;
-            }
-        }
-    }
-
+	if(!load_scratchpad_from_file(pscratchpad_local_cache))
+	{
+		if(!pscratchpad_url)
+		{
+			applog(LOG_ERR, "Scratchpad URL not set. Please specify correct scratchpad url by -k or --scratchpad option");
+			return 1;
+		}
+		if(!download_inital_scratchpad(pscratchpad_local_cache, pscratchpad_url))
+		{
+			applog(LOG_ERR, "Scratchpad not found and not downloaded. Please specify correct scratchpad url by -k or --scratchpad  option");
+			return 1;
+		}
+		if(!load_scratchpad_from_file(pscratchpad_local_cache))
+		{
+			applog(LOG_ERR, "Failed to load scratchpad data after downloading, probably broken scratchpad link, please restart miner with correct inital scratcpad link(-k or --scratchpad )");
+			unlink(pscratchpad_local_cache);
+			return 1;
+		}
+	}
 
     if (!opt_benchmark && !rpc_url) {
         fprintf(stderr, "%s: no URL supplied\n", argv[0]);

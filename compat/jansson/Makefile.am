@@ -1,18 +1,7 @@
 
 noinst_LIBRARIES	= libjansson.a
 
-libjansson_a_SOURCES	= \
-			  config.h		\
-			  dump.c		\
-			  hashtable.c		\
-			  hashtable.h		\
-			  jansson.h		\
-			  jansson_private.h	\
-			  load.c		\
-			  strbuffer.c		\
-			  strbuffer.h		\
-			  utf.c			\
-			  utf.h			\
-			  util.h		\
-			  value.c
+libjansson_a_SOURCES	= dump.c   hashtable.c  hashtable_seed.c  jansson.h          load.c     memory.c       strbuffer.c  strconv.c  \
+			  utf.h error.c  hashtable.h  jansson_private.h  lookup3.h  pack_unpack.c  strbuffer.h  utf.c      value.c
+libjansson_a_CFLAGS	= -fPIC
 
