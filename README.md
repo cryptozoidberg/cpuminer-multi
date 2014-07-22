@@ -57,14 +57,16 @@ Build
 =====
 
 #### Basic *nix build instructions:
+```sh
  * ./autogen.sh	# only needed if building from git repo
  * ./nomacro.pl	# only needed if building on Mac OS X or with Clang
  * ./configure CFLAGS="-O3 *-march=native*"
    * # Use -march=native if building for a single machine
  * make
+```
 
 #### Notes for AIX users:
- * To build a 64-bit binary, export OBJECT_MODE=64
+ * To build a 64-bit binary, `export OBJECT_MODE=64`
  * GNU-style long options are not supported, but are accessible via configuration file
 
 #### Basic Windows build instructions, using MinGW:
@@ -76,10 +78,21 @@ Build
    * Make sure you have curl-config in MinGW\bin
  * Install openssl devel (https://www.openssl.org/related/binaries.html)
  * In the MSYS shell, run:
-   * ./autogen.sh	# only needed if building from git repo
-   * LIBCURL="-lcurldll" ./configure CFLAGS="-O3 *-march=native*"
-     * # Use -march=native if building for a single machine
-   * make
+```sh
+./autogen.sh	# only needed if building from git repo
+LIBCURL="-lcurldll" ./configure CFLAGS="-O3 *-march=native*"
+# Use -march=native if building for a single machine
+make
+```
+
+#### Basic cross-compile instructions, compiling for win64 on Linux Fedora:
+ * 
+```sh
+yum install mingw\*
+./autogen.sh    # only needed if building from git repo
+./configure CC=x86_64-w64-mingw32-gcc RANLIB=x86_64-w64-mingw32-ranlib --target x86_64-w64-mingw32 
+make
+```
 
 #### Architecture-specific notes:
  * ARM:
@@ -97,9 +110,9 @@ Build
 
 Usage instructions
 ==================
-
+```sh
 ./minerd -a wildkeccak -o stratum+tcp://url_to_server:7778 -u 1L1ZPC9XodC6g5BX8j8m3vcdkXPiZrVF7RcERWE879coQDWiztUbkkVZ86o43P27Udb3qxL4B41gbaGpvj3nS7DgFZauAZE  -p x -P -D -t 1 -k https://raw.githubusercontent.com/scratchpadbbr/scratchpad/master/scratchpad.bin --scratchpad_local_cache=/home/roky/cpuminer-multi/s.bin
-
+```
 Run "minerd --help" to see options.
 
 
