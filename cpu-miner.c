@@ -150,7 +150,7 @@ int opt_timeout = 0;
 static int opt_scantime = 5;
 static json_t *opt_config;
 static const bool opt_time = true;
-static enum mining_algo opt_algo = ALGO_SCRYPT;
+static const enum mining_algo opt_algo = ALGO_WILD_KECCAK;
 static int opt_n_threads;
 static int num_processors;
 static char *rpc_url;
@@ -1399,55 +1399,10 @@ static void stratum_gen_work(struct stratum_ctx *sctx, struct work *work) {
 
     pthread_mutex_lock(&sctx->work_lock);
 
-    if (jsonrpc_2) {
-        free(work->job_id);
-        memcpy(work, &sctx->work, sizeof(struct work));
-        work->job_id = strdup(sctx->work.job_id);
-        pthread_mutex_unlock(&sctx->work_lock);
-    } else {
-        free(work->job_id);
-        work->job_id = strdup(sctx->job.job_id);
-        work->xnonce2_len = sctx->xnonce2_size;
-        work->xnonce2 = realloc(work->xnonce2, sctx->xnonce2_size);
-        memcpy(work->xnonce2, sctx->job.xnonce2, sctx->xnonce2_size);
-
-        /* Generate merkle root */
-        sha256d(merkle_root, sctx->job.coinbase, sctx->job.coinbase_size);
-        for (i = 0; i < sctx->job.merkle_count; i++) {
-            memcpy(merkle_root + 32, sctx->job.merkle[i], 32);
-            sha256d(merkle_root, merkle_root, 64);
-        }
-
-        /* Increment extranonce2 */
-        for (i = 0; i < sctx->xnonce2_size && !++sctx->job.xnonce2[i]; i++)
-            ;
-
-        /* Assemble block header */
-        memset(work->data, 0, 128);
-        work->data[0] = le32dec(sctx->job.version);
-        for (i = 0; i < 8; i++)
-            work->data[1 + i] = le32dec((uint32_t *) sctx->job.prevhash + i);
-        for (i = 0; i < 8; i++)
-            work->data[9 + i] = be32dec((uint32_t *) merkle_root + i);
-        work->data[17] = le32dec(sctx->job.ntime);
-        work->data[18] = le32dec(sctx->job.nbits);
-        work->data[20] = 0x80000000;
-        work->data[31] = 0x00000280;
-
-        pthread_mutex_unlock(&sctx->work_lock);
-
-        if (opt_debug) {
-            char *xnonce2str = bin2hex(work->xnonce2, work->xnonce2_len);
-            applog(LOG_DEBUG, "DEBUG: job_id='%s' extranonce2=%s ntime=%08x",
-                work->job_id, xnonce2str, swab32(work->data[17]));
-            free(xnonce2str);
-        }
-
-        if (opt_algo == ALGO_SCRYPT)
-            diff_to_target(work->target, sctx->job.diff / 65536.0);
-        else
-            diff_to_target(work->target, sctx->job.diff);
-    }
+	free(work->job_id);
+	memcpy(work, &sctx->work, sizeof(struct work));
+	work->job_id = strdup(sctx->work.job_id);
+	pthread_mutex_unlock(&sctx->work_lock);
 }
 
 static void *miner_thread(void *userdata) {
@@ -1477,9 +1432,6 @@ static void *miner_thread(void *userdata) {
         affine_to_cpu(thr_id, thr_id % num_processors);
     }
 
-    if (opt_algo == ALGO_SCRYPT) {
-        scratchbuf = scrypt_buffer_alloc();
-    }
     uint32_t *nonceptr = (uint32_t*) (((char*)work.data) + (jsonrpc_2 ? 39 : 76));
     bool wild_keccak = false;
     if(opt_algo == ALGO_WILD_KECCAK) {
@@ -1600,62 +1552,7 @@ static void *miner_thread(void *userdata) {
         gettimeofday(&tv_start, NULL );
 
         /* scan nonces for a proof-of-work hash */
-        switch (opt_algo) {
-        case ALGO_SCRYPT:
-            rc = scanhash_scrypt(thr_id, work.data, scratchbuf, work.target,
-                max_nonce, &hashes_done);
-            break;
-
-        case ALGO_SHA256D:
-            rc = scanhash_sha256d(thr_id, work.data, work.target, max_nonce,
-                &hashes_done);
-            break;
-
-        case ALGO_KECCAK:
-            rc = scanhash_keccak(thr_id, work.data, work.target, max_nonce,
-                &hashes_done);
-            break;
-
-        case ALGO_HEAVY:
-            rc = scanhash_heavy(thr_id, work.data, work.target, max_nonce,
-                &hashes_done);
-            break;
-
-        case ALGO_QUARK:
-            rc = scanhash_quark(thr_id, work.data, work.target, max_nonce,
-                &hashes_done);
-            break;
-
-        case ALGO_SKEIN:
-            rc = scanhash_skein(thr_id, work.data, work.target, max_nonce,
-                &hashes_done);
-            break;
-        case ALGO_SHAVITE3:
-            rc = scanhash_ink(thr_id, work.data, work.target, max_nonce,
-                &hashes_done);
-            break;
-        case ALGO_BLAKE:
-            rc = scanhash_blake(thr_id, work.data, work.target, max_nonce,
-                &hashes_done);
-            break;
-        case ALGO_X11:
-            rc = scanhash_x11(thr_id, work.data, work.target, max_nonce,
-                &hashes_done);
-            break;
-        case ALGO_CRYPTONIGHT:
-            rc = scanhash_cryptonight(thr_id, work.data, work.target,
-                max_nonce, &hashes_done);
-            break;
-
-        case ALGO_WILD_KECCAK:
-            rc = scanhash_wildkeccak(thr_id, work.data, work.target, max_nonce, &hashes_done);
-            break;
-
-
-        default:
-            /* should never happen */
-            goto out;
-        }
+        rc = scanhash_wildkeccak(thr_id, work.data, work.target, max_nonce, &hashes_done);
 
         /* record scanhash elapsed time */
         gettimeofday(&tv_end, NULL );
@@ -2228,18 +2125,7 @@ static void parse_arg(int key, char *arg) {
 
     switch (key) {
     case 'a':
-        fprintf(stderr, "parsing algo: %s\n", arg);
-        for (i = 0; i < ARRAY_SIZE(algo_names); i++) {
-            if (algo_names[i] && !strcmp(arg, algo_names[i])) {
-                opt_algo = i;
-                break;
-            }
-        }
-        if (i == ARRAY_SIZE(algo_names))
-        {
-            printf("algo name not found: %s", arg);
-            show_usage_and_exit(1);
-        }
+        applog(LOG_INFO, "Algorithm switch ignored - this miner supports Wild Keccak only.\n");
         break;
     case 'k':
         pscratchpad_url = arg;
@@ -2544,14 +2430,7 @@ int main(int argc, char *argv[]) {
     /* parse command line */
     parse_cmdline(argc, argv);
 
-    if (opt_algo == ALGO_QUARK) {
-        init_quarkhash_contexts();
-    } else if (opt_algo == ALGO_BLAKE) {
-        init_blakehash_contexts();
-    } else if(opt_algo == ALGO_CRYPTONIGHT) {
-        jsonrpc_2 = true;
-        applog(LOG_INFO, "Using JSON-RPC 2.0");
-    } else if(opt_algo == ALGO_WILD_KECCAK) {
+    if(opt_algo == ALGO_WILD_KECCAK) {
         char cachedir[PATH_MAX];      
         jsonrpc_2 = true;
         //TODO: add windows version code here
