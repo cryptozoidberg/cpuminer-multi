@@ -937,7 +937,6 @@ err_out: return false;
 }
 
 static void share_result(int result, struct work *work, const char *reason) {
-    char s[345];
     double hashrate = 0.0;
     int i;
 
@@ -1369,15 +1368,11 @@ err_out: workio_cmd_free(wc);
 }
 
 static void stratum_gen_work(struct stratum_ctx *sctx, struct work *work) {
-    unsigned char merkle_root[64];
-    int i;
-
     pthread_mutex_lock(&sctx->work_lock);
-
-	free(work->job_id);
-	memcpy(work, &sctx->work, sizeof(struct work));
-	work->job_id = strdup(sctx->work.job_id);
-	pthread_mutex_unlock(&sctx->work_lock);
+    free(work->job_id);
+    memcpy(work, &sctx->work, sizeof(struct work));
+    work->job_id = strdup(sctx->work.job_id);
+    pthread_mutex_unlock(&sctx->work_lock);
 }
 
 static void *miner_thread(void *userdata) {
@@ -1386,7 +1381,6 @@ static void *miner_thread(void *userdata) {
     struct work work = { { 0 } };
     uint32_t max_nonce;
     uint32_t end_nonce = 0xffffffffU / opt_n_threads * (thr_id + 1) - 0x20;
-    unsigned char *scratchbuf = NULL;
     char s[16];
     int i;
 
@@ -1409,9 +1403,7 @@ static void *miner_thread(void *userdata) {
     }
 
     uint32_t *nonceptr = (uint32_t*) (((char*)work.data) + (jsonrpc_2 ? 39 : 76));
-    bool wild_keccak = false;
     nonceptr = (uint32_t*) (((char*)work.data) + 1);
-    wild_keccak = true;
 
     //boolberry job 01000000000000000009048cc3ccbbf6de2095ac436ad08dfa2a42654e866c40bb26bde37baacf300900d684c69d0501ef58fd3722b8cf3068814c5f60fa16b75a13282270c1ece90d7939627708d43a01
     while (1) {
@@ -1421,73 +1413,43 @@ static void *miner_thread(void *userdata) {
         int rc;
 
         if (have_stratum) {
-            while (!scratchpad_size || !stratum_have_work || (!jsonrpc_2 && time(NULL) >= g_work_time + 120))
+            while (!scratchpad_size || !stratum_have_work ||
+                  (!jsonrpc_2 && time(NULL) >= g_work_time + 120)) {
                 sleep(1);
-            pthread_mutex_lock(&g_work_lock);
-            if(!wild_keccak)
-            {
-                if ((*nonceptr) >= end_nonce && !(jsonrpc_2 ? memcmp(work.data, g_work.data, 39) || memcmp(((uint8_t*) work.data) + 43, ((uint8_t*) g_work.data) + 43, 33) 
-                    : 
-                    memcmp(work.data, g_work.data, 76)
-                    )
-                    )
-                {
-                    stratum_gen_work(&stratum, &g_work);
-                }
-            }else
-            {
-                if ((*nonceptr) >= end_nonce && !(jsonrpc_2 ? memcmp(((uint8_t*) work.data) + 1 + 8, ((uint8_t*) g_work.data) + 1 + 8, 80-9):memcmp(work.data, g_work.data, 80)
-                    )
-                    )
-                {
-                    stratum_gen_work(&stratum, &g_work);
-                }
-
             }
-
+            pthread_mutex_lock(&g_work_lock);
+            if ((*nonceptr) >= end_nonce && !(jsonrpc_2 ? memcmp(((uint8_t*) work.data) + 1 + 8,
+                                            ((uint8_t*) g_work.data) + 1 + 8, 80-9) :
+                                            memcmp(work.data, g_work.data, 80))) {
+                stratum_gen_work(&stratum, &g_work);
+            }
         } else {
             /* obtain new work from internal workio thread */
             pthread_mutex_lock(&g_work_lock);
-            if ((!have_stratum
-                && (!have_longpoll
-                || time(NULL ) >= g_work_time + LP_SCANTIME * 3 / 4
-                || *nonceptr >= end_nonce))) {
-                    if (unlikely(!get_work(mythr, &g_work))) {
-                        applog(LOG_ERR, "work retrieval failed, exiting "
-                            "mining thread %d", mythr->id);
-                        pthread_mutex_unlock(&g_work_lock);
-                        goto out;
-                    }
-                    g_work_time = have_stratum ? 0 : time(NULL );
+            if ((!have_stratum && (!have_longpoll ||
+                 time(NULL ) >= g_work_time + LP_SCANTIME * 3 / 4 ||
+                 *nonceptr >= end_nonce))) {
+                if (unlikely(!get_work(mythr, &g_work))) {
+                    applog(LOG_ERR, "work retrieval failed, exiting "
+                           "mining thread %d", mythr->id);
+                    pthread_mutex_unlock(&g_work_lock);
+                    goto out;
+                }
+                g_work_time = have_stratum ? 0 : time(NULL );
             }
             if (have_stratum) {
                 pthread_mutex_unlock(&g_work_lock);
                 continue;
             }
         }
-        if(!wild_keccak)
-        {
-            if (jsonrpc_2 ? memcmp(work.data, g_work.data, 39) || memcmp(((uint8_t*) work.data) + 43, ((uint8_t*) g_work.data) + 43, 33) : memcmp(work.data, g_work.data, 76)) 
-            {
-                work_free(&work);
-                work_copy(&work, &g_work);
-                nonceptr = (uint32_t*) (((char*)work.data) + (jsonrpc_2 ? 39 : 76));
-                *nonceptr = 0xffffffffU / opt_n_threads * thr_id;
-            } else
-                ++(*nonceptr);
-
-        }else
-        {
-            if (memcmp(((uint8_t*) work.data) + 1 + 8, ((uint8_t*) g_work.data) + 1 + 8, 80-9)) 
-            {
-                work_free(&work);
-                work_copy(&work, &g_work);
-                nonceptr = (uint32_t*) (((char*)work.data) + 1);
-                *nonceptr = 0xffffffffU / opt_n_threads * thr_id;
-            } else
-                ++(*nonceptr);
+        if (memcmp(((uint8_t*) work.data) + 1 + 8, ((uint8_t*) g_work.data) + 1 + 8, 80-9)) {
+            work_free(&work);
+            work_copy(&work, &g_work);
+            nonceptr = (uint32_t*) (((char*)work.data) + 1);
+            *nonceptr = 0xffffffffU / opt_n_threads * thr_id;
+        } else {
+            ++(*nonceptr);
         }
-
 
         pthread_mutex_unlock(&g_work_lock);
         work_restart[thr_id].restart = 0;
@@ -2060,7 +2022,7 @@ static void show_usage_and_exit(int status) {
 
 static void parse_arg(int key, char *arg) {
     char *p;
-    int v, i;
+    int v;
 
     switch (key) {
     case 'a':
