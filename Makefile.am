@@ -22,11 +22,16 @@ minerd_SOURCES	= elist.h \
 		  util.c \
 		  wildkeccak.c
 
-minerd_LDFLAGS	= $(PTHREAD_FLAGS)  -pie
+minerd_LDFLAGS	= $(PTHREAD_FLAGS) 
 minerd_LDADD	= @LIBCURL@ @JANSSON_LIBS@ @PTHREAD_LIBS@ @WS2_LIBS@
 minerd_CPPFLAGS = @LIBCURL_CPPFLAGS@
-minerd_CFLAGS   = -flto -std=gnu11 -O3 -march=native -fPIC
+minerd_CFLAGS   = -std=gnu11 -O3 -march=native -fPIC -flto
 
 if HAVE_WINDOWS
 minerd_CFLAGS += -Wl,--stack,10485760 -DCURL_STATICLIB
+endif
+
+if !HAVE_WINDOWS
+minerd_LDFLAGS	+= -pie
+#minerd_CFLAGS += 
 endif
