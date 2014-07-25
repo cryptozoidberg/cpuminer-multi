@@ -80,7 +80,6 @@ static __always_inline void wildkeccak(uint64_t* st, const uint64_t* pscr, uint6
 {
     uint64_t x, i;
     uint64_t idx[KK_MIXIN_SIZE];
-    __m128i *st0;
 
     for (i = 0; i < KK_MIXIN_SIZE; ++i) {
         if (i == 0) goto skipfirst;
@@ -91,7 +90,19 @@ static __always_inline void wildkeccak(uint64_t* st, const uint64_t* pscr, uint6
             prefetch1(&pscr[idx[x]]);
         }
 
-        st0 = (__m128i *)st;
+#if defined(__AVX2__)
+#warning using AVX2 optimizations
+        __m256i *st0 = (__m256i *)st;
+        for(x = 0; x < KK_MIXIN_SIZE / 4; ++x) {
+            *st0 = _mm256_xor_si256(*st0, *((__m256i *)&pscr[idx[x*4 + 0]]));
+            *st0 = _mm256_xor_si256(*st0, *((__m256i *)&pscr[idx[x*4 + 1]]));
+            *st0 = _mm256_xor_si256(*st0, *((__m256i *)&pscr[idx[x*4 + 2]]));
+            *st0 = _mm256_xor_si256(*st0, *((__m256i *)&pscr[idx[x*4 + 3]]));
+            st0++;
+        }
+#elif defined(__SSE2__)
+#warning using SSE2 optimizations
+        __m128i *st0 = (__m128i *)st;
         for(x = 0; x < KK_MIXIN_SIZE / 4; ++x) {
             st0[0] = _mm_xor_si128(st0[0], *((__m128i *)&pscr[idx[x*4 + 0]]));
             st0[0] = _mm_xor_si128(st0[0], *((__m128i *)&pscr[idx[x*4 + 1]]));
@@ -103,6 +114,15 @@ static __always_inline void wildkeccak(uint64_t* st, const uint64_t* pscr, uint6
             st0[1] = _mm_xor_si128(st0[1], *((__m128i *)&pscr[idx[x*4 + 3] + 2]));
             st0 += 2;
         }
+#else
+#warning using non-optimized 64bit operations
+        for(x = 0; x < KK_MIXIN_SIZE; x += 4) {
+            st[x+0] ^= pscr[idx[x + 0] + 0] ^ pscr[idx[x + 1] + 0] ^ pscr[idx[x + 2] + 0] ^ pscr[idx[x + 3] + 0];
+            st[x+1] ^= pscr[idx[x + 0] + 1] ^ pscr[idx[x + 1] + 1] ^ pscr[idx[x + 2] + 1] ^ pscr[idx[x + 3] + 1];
+            st[x+2] ^= pscr[idx[x + 0] + 2] ^ pscr[idx[x + 1] + 2] ^ pscr[idx[x + 2] + 2] ^ pscr[idx[x + 3] + 2];
+            st[x+3] ^= pscr[idx[x + 0] + 3] ^ pscr[idx[x + 1] + 3] ^ pscr[idx[x + 2] + 3] ^ pscr[idx[x + 3] + 3];
+        }
+#endif
 skipfirst:
         keccakf_mul(st);
     }
@@ -113,19 +133,19 @@ static void __always_inline wild_keccak_hash_dbl(const uint8_t *in, size_t inlen
     uint64_t st[25] __aligned(32);
     struct reciprocal_value64 recip;
 
-    scr_size >>= 2;
+    scr_size >>= 2; /* scr_size now in crypto::hash units (32 bytes) */
     recip = reciprocal_value64(scr_size);
 
     // Wild Keccak #1
     memcpy(st, in, 81);
     st[10] = (st[10] & 0x00000000000000FFULL) | 0x0000000000000100ULL;
-    memset(&st[11], 0x00, 112);
+    memset(&st[11], 0, 200-(11*8));
     st[16] |= 0x8000000000000000ULL;
     wildkeccak(st, pscr, scr_size, recip);
 
-    // Wild Keccak #2
-    memset(&st[4], 0x00, 168);
+    // Wild Keccak #2 - st[0]..st[3] contains resulting hash of #1
     st[4] = 0x0000000000000001ULL;
+    memset(&st[5], 0, 200-(5*8));
     st[16] |= 0x8000000000000000ULL;
     wildkeccak(st, pscr, scr_size, recip);
 
