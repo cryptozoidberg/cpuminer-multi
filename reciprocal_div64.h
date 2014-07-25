@@ -49,7 +49,7 @@ static inline u64 reciprocal_divide64(u64 a, struct reciprocal_value64 R)
 	return (t + ((a - t) >> R.sh1)) >> R.sh2;
 }
 
-static inline uint64_t reciprocal_remainder64(uint64_t A, uint64_t B, struct reciprocal_value64 R)
+static __always_inline uint64_t reciprocal_remainder64(uint64_t A, uint64_t B, struct reciprocal_value64 R)
 {
 	uint64_t div, mod;
 
