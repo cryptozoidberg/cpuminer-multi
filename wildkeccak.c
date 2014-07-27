@@ -77,12 +77,11 @@ static __always_inline void keccakf_mul(uint64_t *s)
 
 static __always_inline void wildkeccak(uint64_t *restrict st, const uint64_t *restrict pscr, uint64_t scr_size, struct reciprocal_value64 recip)
 {
-    uint64_t x, i;
+    uint64_t x, i = 0;
     uint64_t idx[KK_MIXIN_SIZE];
 	
-	keccakf_mul(st);
-	
-    for (i = 1; i < KK_MIXIN_SIZE; ++i)
+    goto skipfirst;
+    for (; i < KK_MIXIN_SIZE; ++i)
     {
         /* force CPU to prefetch cache line from RAM in the background */
         for (x = 0; x < KK_MIXIN_SIZE; x++)
@@ -126,7 +125,8 @@ static __always_inline void wildkeccak(uint64_t *restrict st, const uint64_t *re
             st[x+3] ^= pscr[idx[x + 0] + 3] ^ pscr[idx[x + 1] + 3] ^ pscr[idx[x + 2] + 3] ^ pscr[idx[x + 3] + 3];
         }
 #endif
-		keccakf_mul(st);
+skipfirst:
+        keccakf_mul(st);
     }
 }
 
