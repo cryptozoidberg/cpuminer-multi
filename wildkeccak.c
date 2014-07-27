@@ -22,7 +22,6 @@ enum {
 #define KK_MIXIN_SIZE 24
 __attribute__((const)) static inline uint64_t rotl641(uint64_t x) { return((x << 1) | (x >> 63)); }
 __attribute__((const)) static inline uint64_t rotl64_1(uint64_t x, uint64_t y) { return((x << y) | (x >> (64 - y))); }
-__attribute__((const)) static inline uint64_t rotl64_2(uint64_t x, uint64_t y) { return(rotl64_1((x >> 32) | (x << 32), y)); }
 __attribute__((const)) static inline uint64_t bitselect(uint64_t a, uint64_t b, uint64_t c) { return(a ^ (c & (b ^ a))); }
 
 static __always_inline void keccakf_mul(uint64_t *s)
@@ -43,23 +42,23 @@ static __always_inline void keccakf_mul(uint64_t *s)
 	tmp1 = s[1] ^ bc[0];
 	
 	s[0] ^= bc[4];
-	s[1] = rotl64_2(s[6] ^ bc[0], 12);
+	s[1] = rotl64_1(s[6] ^ bc[0], 44);
 	s[6] = rotl64_1(s[9] ^ bc[3], 20);
-	s[9] = rotl64_2(s[22] ^ bc[1], 29);
-	s[22] = rotl64_2(s[14] ^ bc[3], 7);
+	s[9] = rotl64_1(s[22] ^ bc[1], 61);
+	s[22] = rotl64_1(s[14] ^ bc[3], 39);
 	s[14] = rotl64_1(s[20] ^ bc[4], 18);
-	s[20] = rotl64_2(s[2] ^ bc[1], 30);
-	s[2] = rotl64_2(s[12] ^ bc[1], 11);
+	s[20] = rotl64_1(s[2] ^ bc[1], 62);
+	s[2] = rotl64_1(s[12] ^ bc[1], 43);
 	s[12] = rotl64_1(s[13] ^ bc[2], 25);
 	s[13] = rotl64_1(s[19] ^ bc[3], 8);
-	s[19] = rotl64_2(s[23] ^ bc[2], 24);
-	s[23] = rotl64_2(s[15] ^ bc[4], 9);
+	s[19] = rotl64_1(s[23] ^ bc[2], 56);
+	s[23] = rotl64_1(s[15] ^ bc[4], 41);
 	s[15] = rotl64_1(s[4] ^ bc[3], 27);
 	s[4] = rotl64_1(s[24] ^ bc[3], 14);
 	s[24] = rotl64_1(s[21] ^ bc[0], 2);
-	s[21] = rotl64_2(s[8] ^ bc[2], 23);
-	s[8] = rotl64_2(s[16] ^ bc[0], 13);
-	s[16] = rotl64_2(s[5] ^ bc[4], 4);
+	s[21] = rotl64_1(s[8] ^ bc[2], 55);
+	s[8] = rotl64_1(s[16] ^ bc[0], 45);
+	s[16] = rotl64_1(s[5] ^ bc[4], 36);
 	s[5] = rotl64_1(s[3] ^ bc[2], 28);
 	s[3] = rotl64_1(s[18] ^ bc[2], 21);
 	s[18] = rotl64_1(s[17] ^ bc[1], 15);
@@ -76,16 +75,18 @@ static __always_inline void keccakf_mul(uint64_t *s)
 	s[0] ^= 0x0000000000000001ULL;
 }
 
-static __always_inline void wildkeccak(uint64_t* st, const uint64_t* pscr, uint64_t scr_size, struct reciprocal_value64 recip)
+static __always_inline void wildkeccak(uint64_t *restrict st, const uint64_t *restrict pscr, uint64_t scr_size, struct reciprocal_value64 recip)
 {
     uint64_t x, i;
     uint64_t idx[KK_MIXIN_SIZE];
-
-    for (i = 0; i < KK_MIXIN_SIZE; ++i) {
-        if (i == 0) goto skipfirst;
-
+	
+	keccakf_mul(st);
+	
+    for (i = 1; i < KK_MIXIN_SIZE; ++i)
+    {
         /* force CPU to prefetch cache line from RAM in the background */
-        for (x = 0; x < KK_MIXIN_SIZE; x++) {
+        for (x = 0; x < KK_MIXIN_SIZE; x++)
+        {
             idx[x] = reciprocal_remainder64(st[x], scr_size, recip) << 2;
             prefetch1(&pscr[idx[x]]);
         }
@@ -93,7 +94,8 @@ static __always_inline void wildkeccak(uint64_t* st, const uint64_t* pscr, uint6
 #if defined(__AVX2__)
 #warning using AVX2 optimizations
         __m256i *st0 = (__m256i *)st;
-        for(x = 0; x < KK_MIXIN_SIZE / 4; ++x) {
+        for(x = 0; x < KK_MIXIN_SIZE >> 2; ++x)
+        {
             *st0 = _mm256_xor_si256(*st0, *((__m256i *)&pscr[idx[x*4 + 0]]));
             *st0 = _mm256_xor_si256(*st0, *((__m256i *)&pscr[idx[x*4 + 1]]));
             *st0 = _mm256_xor_si256(*st0, *((__m256i *)&pscr[idx[x*4 + 2]]));
@@ -103,7 +105,8 @@ static __always_inline void wildkeccak(uint64_t* st, const uint64_t* pscr, uint6
 #elif defined(__SSE2__)
 #warning using SSE2 optimizations
         __m128i *st0 = (__m128i *)st;
-        for(x = 0; x < KK_MIXIN_SIZE / 4; ++x) {
+        for(x = 0; x < KK_MIXIN_SIZE >> 2; ++x)
+        {
             st0[0] = _mm_xor_si128(st0[0], *((__m128i *)&pscr[idx[x*4 + 0]]));
             st0[0] = _mm_xor_si128(st0[0], *((__m128i *)&pscr[idx[x*4 + 1]]));
             st0[0] = _mm_xor_si128(st0[0], *((__m128i *)&pscr[idx[x*4 + 2]]));
@@ -123,8 +126,7 @@ static __always_inline void wildkeccak(uint64_t* st, const uint64_t* pscr, uint6
             st[x+3] ^= pscr[idx[x + 0] + 3] ^ pscr[idx[x + 1] + 3] ^ pscr[idx[x + 2] + 3] ^ pscr[idx[x + 3] + 3];
         }
 #endif
-skipfirst:
-        keccakf_mul(st);
+		keccakf_mul(st);
     }
 }
 
@@ -138,14 +140,14 @@ static void __always_inline wild_keccak_hash_dbl(const uint8_t *in, size_t inlen
 
     // Wild Keccak #1
     memcpy(st, in, 81);
+    memset(&st[11], 0, 112);
     st[10] = (st[10] & 0x00000000000000FFULL) | 0x0000000000000100ULL;
-    memset(&st[11], 0, 200-(11*8));
     st[16] |= 0x8000000000000000ULL;
     wildkeccak(st, pscr, scr_size, recip);
 
     // Wild Keccak #2 - st[0]..st[3] contains resulting hash of #1
+    memset(&st[5], 0, 160);
     st[4] = 0x0000000000000001ULL;
-    memset(&st[5], 0, 200-(5*8));
     st[16] |= 0x8000000000000000ULL;
     wildkeccak(st, pscr, scr_size, recip);
 
