@@ -244,7 +244,7 @@ struct  __attribute__((__packed__)) scratchpad_hi
 };
 
 #define WILD_KECCAK_ADDENDUMS_ARRAY_SIZE  10
-
+#define LOCAL_SCRATCHPAD_CACHE_EXPIRATION_INTERVAL 60*60*24*3   //3 days
 
 
 struct __attribute__((__packed__)) addendums_array_entry

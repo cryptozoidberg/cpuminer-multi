@@ -1686,6 +1686,20 @@ bool store_scratchpad_to_file(bool do_fsync)
 /* TODO: repetitive error+log spam handling */
 bool load_scratchpad_from_file(const char *fname)
 {
+
+    struct stat file_stat;
+    if(stat(fname, &file_stat) < 0)    
+    {
+        applog(LOG_ERR, "fstat error from %s: %s", fname, strerror(errno));
+        return false;
+    }
+    if(time(NULL) - file_stat.st_mtime > LOCAL_SCRATCHPAD_CACHE_EXPIRATION_INTERVAL)
+    {
+        applog(LOG_NOTICE, "Scratchpad file is too old %s", fname);
+        return false;
+    }
+
+
     FILE *fp;
 
     fp = fopen(fname, "rb");
@@ -1696,6 +1710,7 @@ bool load_scratchpad_from_file(const char *fname)
         }
         return false;
     }
+
 
     struct scratchpad_file_header fh = {0};
     if ((fread(&fh, sizeof(fh), 1, fp) != 1))
