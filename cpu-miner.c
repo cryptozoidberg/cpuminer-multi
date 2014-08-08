@@ -783,6 +783,7 @@ bool rpc2_job_decode(const json_t *job, struct work *work)
             goto err_out;
         }
         memcpy(work->data, rpc2_blob, rpc2_bloblen);
+        work->job_len = rpc2_bloblen;
         memset(work->target, 0xff, sizeof(work->target));
         //*((uint64_t*)&work->target[6]) = rpc2_target;
         work->target[7] = rpc2_target;
@@ -982,7 +983,7 @@ static bool submit_upstream_work(CURL *curl, struct work *work) {
 
             noncestr = bin2hex(((const unsigned char*)work->data) + 1, 8);
             strcpy(last_found_nonce, noncestr);
-            wild_keccak_hash_dbl_use_global_scratch((uint8_t*)work->data, 81, (uint8_t*)hash);                
+            wild_keccak_hash_dbl_use_global_scratch((uint8_t*)work->data, work->job_len, (uint8_t*)hash);                
             hashhex = bin2hex(hash, 32);
             snprintf(s, JSON_BUF_LEN,
                 "{\"method\": \"submit\", \"params\": {\"id\": \"%s\", \"job_id\": \"%s\", \"nonce\": \"%s\", \"result\": \"%s\"}, \"id\":1}\r\n",
@@ -1015,7 +1016,7 @@ static bool submit_upstream_work(CURL *curl, struct work *work) {
 
             noncestr = bin2hex(((const unsigned char*)work->data) + 1, 8);
             strcpy(last_found_nonce, noncestr);
-            wild_keccak_hash_dbl_use_global_scratch((uint8_t*)work->data, 81, (uint8_t*)hash);
+            wild_keccak_hash_dbl_use_global_scratch((uint8_t*)work->data, work->job_len, (uint8_t*)hash);
             hashhex = bin2hex(hash, 32);
             snprintf(s, JSON_BUF_LEN,
                 "{\"method\": \"submit\", \"params\": {\"id\": \"%s\", \"job_id\": \"%s\", \"nonce\": \"%s\", \"result\": \"%s\"}, \"id\":1}\r\n",

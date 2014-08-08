@@ -287,6 +287,7 @@ extern bool rpc2_getfullscratchpad_decode(const json_t *val);
 struct work {
     uint32_t data[32];
     uint32_t target[8];
+    uint32_t job_len;
 
     char *job_id;
     size_t xnonce2_len;
