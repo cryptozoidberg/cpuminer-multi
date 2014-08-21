@@ -244,7 +244,7 @@ struct  __attribute__((__packed__)) scratchpad_hi
 };
 
 #define WILD_KECCAK_ADDENDUMS_ARRAY_SIZE  10
-
+#define LOCAL_SCRATCHPAD_CACHE_EXPIRATION_INTERVAL 60*60*24*3   //3 days
 
 
 struct __attribute__((__packed__)) addendums_array_entry
@@ -263,6 +263,7 @@ struct __attribute__((__packed__)) scratchpad_file_header
 
 
 extern volatile bool stratum_have_work;
+extern volatile bool need_to_rerequest_job;
 extern uint64_t* pscratchpad_buff;
 extern volatile uint64_t scratchpad_size;
 extern struct scratchpad_hi current_scratchpad_hi;
@@ -287,6 +288,7 @@ extern bool rpc2_getfullscratchpad_decode(const json_t *val);
 struct work {
     uint32_t data[32];
     uint32_t target[8];
+    uint32_t job_len;
 
     char *job_id;
     size_t xnonce2_len;

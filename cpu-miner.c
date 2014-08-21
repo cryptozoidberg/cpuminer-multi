@@ -173,6 +173,7 @@ static char *rpc2_job_id = NULL;
 
 
 volatile bool stratum_have_work = false;
+volatile bool need_to_rerequest_job = false;
 uint64_t* pscratchpad_buff = NULL;
 volatile uint64_t  scratchpad_size = 0;
 
@@ -611,8 +612,8 @@ bool addendum_decode(const json_t *addm)
         //TODO: ADD SPLIT HANDLING HERE
         applog(LOG_ERR, "JSON height in addendum-1 (%lld-1) mismatched with current_scratchpad_hi.height(%lld), reverting scratchpad and re-login", hi.height, current_scratchpad_hi.height);
         revert_scratchpad();
-        //init re-login
-        strcpy(rpc2_id, "");
+        //re-request job
+        need_to_rerequest_job = true;
         return false;
     }
 
@@ -783,6 +784,7 @@ bool rpc2_job_decode(const json_t *job, struct work *work)
             goto err_out;
         }
         memcpy(work->data, rpc2_blob, rpc2_bloblen);
+        work->job_len = rpc2_bloblen;
         memset(work->target, 0xff, sizeof(work->target));
         //*((uint64_t*)&work->target[6]) = rpc2_target;
         work->target[7] = rpc2_target;
@@ -982,7 +984,7 @@ static bool submit_upstream_work(CURL *curl, struct work *work) {
 
             noncestr = bin2hex(((const unsigned char*)work->data) + 1, 8);
             strcpy(last_found_nonce, noncestr);
-            wild_keccak_hash_dbl_use_global_scratch((uint8_t*)work->data, 81, (uint8_t*)hash);                
+            wild_keccak_hash_dbl_use_global_scratch((uint8_t*)work->data, work->job_len, (uint8_t*)hash);                
             hashhex = bin2hex(hash, 32);
             snprintf(s, JSON_BUF_LEN,
                 "{\"method\": \"submit\", \"params\": {\"id\": \"%s\", \"job_id\": \"%s\", \"nonce\": \"%s\", \"result\": \"%s\"}, \"id\":1}\r\n",
@@ -1015,7 +1017,7 @@ static bool submit_upstream_work(CURL *curl, struct work *work) {
 
             noncestr = bin2hex(((const unsigned char*)work->data) + 1, 8);
             strcpy(last_found_nonce, noncestr);
-            wild_keccak_hash_dbl_use_global_scratch((uint8_t*)work->data, 81, (uint8_t*)hash);
+            wild_keccak_hash_dbl_use_global_scratch((uint8_t*)work->data, work->job_len, (uint8_t*)hash);
             hashhex = bin2hex(hash, 32);
             snprintf(s, JSON_BUF_LEN,
                 "{\"method\": \"submit\", \"params\": {\"id\": \"%s\", \"job_id\": \"%s\", \"nonce\": \"%s\", \"result\": \"%s\"}, \"id\":1}\r\n",
@@ -1686,6 +1688,20 @@ bool store_scratchpad_to_file(bool do_fsync)
 /* TODO: repetitive error+log spam handling */
 bool load_scratchpad_from_file(const char *fname)
 {
+
+    struct stat file_stat;
+    if(stat(fname, &file_stat) < 0)    
+    {
+        applog(LOG_ERR, "fstat error from %s: %s", fname, strerror(errno));
+        return false;
+    }
+    if(time(NULL) - file_stat.st_mtime > LOCAL_SCRATCHPAD_CACHE_EXPIRATION_INTERVAL)
+    {
+        applog(LOG_NOTICE, "Scratchpad file is too old %s", fname);
+        return false;
+    }
+
+
     FILE *fp;
 
     fp = fopen(fname, "rb");
@@ -1696,6 +1712,7 @@ bool load_scratchpad_from_file(const char *fname)
         }
         return false;
     }
+
 
     struct scratchpad_file_header fh = {0};
     if ((fread(&fh, sizeof(fh), 1, fp) != 1))
@@ -1827,14 +1844,19 @@ static bool stratum_handle_response(char *buf) {
                 applog(LOG_ERR, "Response returned \"Unauthenticated\", need to relogin");
                 err_val = json_object_get(err_val, "message");
                 valid = false;
+                //init reconnect
+                strcpy(rpc2_id, "");
             }
             else if(perr_msg && !strcmp(perr_msg, "Low difficulty share")) 
             {
                 //applog(LOG_ERR, "Dump scratchpad file");
                 //dump_scrstchpad_to_file();
+              need_to_rerequest_job = true;
+            }else
+            {
+              need_to_rerequest_job = true;
             }
             
-            strcpy(rpc2_id, "");
             stratum_have_work = false;
             restart_threads();
         }
@@ -1884,18 +1906,17 @@ static void *stratum_thread(void *userdata) {
             }
         }
 
-        if(!strcmp(rpc2_id, ""))
-        {            
-            applog(LOG_ERR, "Re-login, disconnecting...");
-            stratum_disconnect(&stratum);
-            //not logged in, try to relogin
-            applog(LOG_ERR, "Re-connect... and relogin...");
-            if(!stratum_connect(&stratum, stratum.url) || !stratum_authorize(&stratum, rpc_user, rpc_pass)) 
+        if(need_to_rerequest_job)
+        {
+            applog(LOG_ERR, "Re-requesting job...");
+            if(!stratum_request_job(&stratum))
             {
-                stratum_disconnect(&stratum);
-                applog(LOG_ERR, "Failed...retry after %d seconds", opt_fail_pause);
-                sleep(opt_fail_pause);
-            }          
+              stratum_disconnect(&stratum);
+              applog(LOG_ERR, "...retry after %d seconds", opt_fail_pause);
+              sleep(opt_fail_pause);
+              continue;
+            }
+            need_to_rerequest_job = false;
         }
 
         if(!scratchpad_size)
