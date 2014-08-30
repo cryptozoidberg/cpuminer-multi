@@ -131,7 +131,7 @@ When the --proxy option is not used, the program honors the http_proxy and all_p
 Donations
 =========
 
--Donations for the work done in this fork by zoidberg are accepted at
+Donations for the work done in this fork by zoidberg are accepted at
 * BBR: `@zoidberg`
 * BTC: `1JjGoHdzP5HvtyEZ6MN9LXbh8uTDVgrPY9`
 
