@@ -34,6 +34,7 @@
 #include "compat.h"
 #include "miner.h"
 #include "elist.h"
+#include "xmalloc.h"
 
 struct data_buffer {
     void		*buf;
@@ -90,16 +91,13 @@ void applog(int prio, const char *fmt, ...)
 #endif
     else {
         char *f;
-        int len;
         time_t now;
         struct tm tm;
 
         time(&now);
         localtime_r(&now, &tm);
 
-        len = 40 + strlen(fmt) + 2;
-        f = alloca(len);
-        sprintf(f, "[%d-%02d-%02d %02d:%02d:%02d] %s\n",
+        xasprintf(&f, "[%d-%02d-%02d %02d:%02d:%02d] %s\n",
             tm.tm_year + 1900,
             tm.tm_mon + 1,
             tm.tm_mday,
@@ -111,6 +109,7 @@ void applog(int prio, const char *fmt, ...)
         vfprintf(stderr, f, ap);	/* atomic write to stderr */
         fflush(stderr);
         pthread_mutex_unlock(&applog_lock);
+        free(f);
     }
     va_end(ap);
 }
@@ -192,12 +191,17 @@ static int seek_data_cb(void *user_data, curl_off_t offset, int origin)
 static size_t resp_hdr_cb(void *ptr, size_t size, size_t nmemb, void *user_data)
 {
     struct header_info *hi = user_data;
-    size_t remlen, slen, ptrlen = size * nmemb;
+    size_t remlen, slen, ptrlen;
     char *rem, *val = NULL, *key = NULL;
     void *tmp;
 
-    val = calloc(1, ptrlen);
-    key = calloc(1, ptrlen);
+    if (size > SIZE_MAX / nmemb) {
+        fatal("CURLOPT_HEADERFUNCTION integer overflow: size=%zu nmemb=%zu",
+              size, nmemb);
+    }
+    ptrlen = size * nmemb;
+    val = xcalloc(1, ptrlen);
+    key = xcalloc(1, ptrlen);
     if (!key || !val)
         goto out;
 
@@ -415,7 +419,7 @@ json_t *json_rpc_call(CURL *curl, const char *url,
         if (err_val)
             s = json_dumps(err_val, JSON_INDENT(3));
         else
-            s = strdup("(unknown reason)");
+            s = xstrdup("(unknown reason)");
 
         applog(LOG_ERR, "JSON-RPC call failed: %s", s);
 
@@ -445,9 +449,7 @@ err_out:
 char *bin2hex(const unsigned char *p, size_t len)
 {
     int i;
-    char *s = malloc((len * 2) + 1);
-    if (!s)
-        return NULL;
+    char *s = xmalloc((len * 2) + 1);
 
     for (i = 0; i < len; i++)
         sprintf(s + (i * 2), "%02x", (unsigned int) p[i]);
@@ -724,7 +726,7 @@ char *stratum_recv_line_timeout(struct stratum_ctx *sctx, int timeout_)
         applog(LOG_ERR, "stratum_recv_line failed to parse a newline-terminated string");
         goto out;
     }
-    sret = strdup(tok);
+    sret = xstrdup(tok);
     len = strlen(sret);
 
     if (buflen > len + 1)
@@ -782,7 +784,7 @@ bool stratum_connect(struct stratum_ctx *sctx, const char *url)
     }
     curl = sctx->curl;
     if (!sctx->sockbuf) {
-        sctx->sockbuf = calloc(RBUFSIZE, 1);
+        sctx->sockbuf = xcalloc(RBUFSIZE, 1);
         sctx->sockbuf_size = RBUFSIZE;
     }
     sctx->sockbuf[0] = '\0';
@@ -790,11 +792,10 @@ bool stratum_connect(struct stratum_ctx *sctx, const char *url)
 
     if (url != sctx->url) {
         free(sctx->url);
-        sctx->url = strdup(url);
+        sctx->url = xstrdup(url);
     }
     free(sctx->curl_url);
-    sctx->curl_url = malloc(strlen(url));
-    sprintf(sctx->curl_url, "http%s", strstr(url, "://"));
+    xasprintf(&sctx->curl_url, "http%s", strstr(url, "://"));
 
     if (opt_protocol)
         curl_easy_setopt(curl, CURLOPT_VERBOSE, 1);
@@ -880,13 +881,12 @@ bool stratum_subscribe(struct stratum_ctx *sctx)
     bool ret = false, retry = false;
 
 start:
-    s = malloc(128 + (sctx->session_id ? strlen(sctx->session_id) : 0));
     if (retry)
-        sprintf(s, "{\"id\": 1, \"method\": \"mining.subscribe\", \"params\": []}");
+        xasprintf(&s, "{\"id\": 1, \"method\": \"mining.subscribe\", \"params\": []}");
     else if (sctx->session_id)
-        sprintf(s, "{\"id\": 1, \"method\": \"mining.subscribe\", \"params\": [\"" USER_AGENT "\", \"%s\"]}", sctx->session_id);
+        xasprintf(&s, "{\"id\": 1, \"method\": \"mining.subscribe\", \"params\": [\"" USER_AGENT "\", \"%s\"]}", sctx->session_id);
     else
-        sprintf(s, "{\"id\": 1, \"method\": \"mining.subscribe\", \"params\": [\"" USER_AGENT "\"]}");
+        xasprintf(&s, "{\"id\": 1, \"method\": \"mining.subscribe\", \"params\": [\"" USER_AGENT "\"]}");
 
     if (!stratum_send_line(sctx, s)) {
         applog(LOG_ERR, "stratum_subscribe send failed");
@@ -919,7 +919,7 @@ start:
                 if (err_val)
                     s = json_dumps(err_val, JSON_INDENT(3));
                 else
-                    s = strdup("(unknown reason)");
+                    s = xstrdup("(unknown reason)");
                 applog(LOG_ERR, "JSON-RPC call failed: %s", s);
             }
             goto out;
@@ -942,9 +942,9 @@ start:
     pthread_mutex_lock(&sctx->work_lock);
     free(sctx->session_id);
     free(sctx->xnonce1);
-    sctx->session_id = sid ? strdup(sid) : NULL;
+    sctx->session_id = sid ? xstrdup(sid) : NULL;
     sctx->xnonce1_size = strlen(xnonce1) / 2;
-    sctx->xnonce1 = malloc(sctx->xnonce1_size);
+    sctx->xnonce1 = xmalloc(sctx->xnonce1_size);
     hex2bin(sctx->xnonce1, xnonce1, sctx->xnonce1_size);
     sctx->xnonce2_size = xn2_size;
     sctx->next_diff = 1.0;
@@ -977,9 +977,7 @@ bool stratum_getscratchpad(struct stratum_ctx *sctx) {
     json_error_t err;
     bool ret = false;
 
-    s = malloc(1000);
-    sprintf(s, "{\"method\": \"getfullscratchpad\", \"params\": {\"id\": \"%s\", \"agent\": \"cpuminer-multi/0.1\"}, \"id\": 1}", rpc2_id);
-
+    xasprintf(&s, "{\"method\": \"getfullscratchpad\", \"params\": {\"id\": \"%s\", \"agent\": \"cpuminer-multi/0.1\"}, \"id\": 1}", rpc2_id);
     applog(LOG_INFO, "Getting full scratchpad....");
     if (!stratum_send_line(sctx, s))
         goto out;
@@ -1012,29 +1010,27 @@ bool stratum_request_job(struct stratum_ctx *sctx)
 {
     json_t *val = NULL, *res_val, *err_val;
     char *sret;
-    char s[20000] = {0};
+    char s[20000];
     json_error_t err;
     bool ret = false;
 
-    if(jsonrpc_2) 
-    {
-        sprintf(s, "{\"method\": \"getjob\", \"params\": {\"id\": \"%s\", \"hi\": { \"height\": %" PRIu64 ", \"block_id\": \"%s\" }, \"agent\": \"cpuminer-multi/0.1\"}, \"id\": 1}",
-            rpc2_id, current_scratchpad_hi.height, bin2hex((const unsigned char*)current_scratchpad_hi.prevhash, 32));
+    if(jsonrpc_2) {
+        /* sizeof(s)-1 because send_line appends '\n' */
+        snprintf(s, sizeof(s)-1, "{\"method\": \"getjob\", \"params\": {\"id\": \"%s\", \"hi\": { \"height\": %" PRIu64
+                 ", \"block_id\": \"%s\" }, \"agent\": \"cpuminer-multi/0.1\"}, \"id\": 1}",
+                 rpc2_id, current_scratchpad_hi.height, bin2hex((const unsigned char*)current_scratchpad_hi.prevhash, 32));
 
-    }else
-    {
+    } else {
         return false;
     }
 
-    if(!stratum_send_line(sctx, s))
-    {
+    if(!stratum_send_line(sctx, s)) {
         applog(LOG_ERR, "Stratum failed to send getjob line");
         goto out;
     }
 
     sret = stratum_recv_line(sctx);
-    if (!sret)
-    {
+    if (!sret) {
         applog(LOG_ERR, "Stratum failed to recv getjob line");
         goto out;
     }
@@ -1075,12 +1071,10 @@ bool stratum_authorize(struct stratum_ctx *sctx, const char *user, const char *p
     bool ret = false;
 
     if(jsonrpc_2) {
-        s = malloc(300 + strlen(user) + strlen(pass));
-        sprintf(s, "{\"method\": \"login\", \"params\": {\"login\": \"%s\", \"pass\": \"%s\", \"hi\": { \"height\": %" PRIu64 ", \"block_id\": \"%s\" }, \"agent\": \"cpuminer-multi/0.1\"}, \"id\": 1}",
+        xasprintf(&s, "{\"method\": \"login\", \"params\": {\"login\": \"%s\", \"pass\": \"%s\", \"hi\": { \"height\": %" PRIu64 ", \"block_id\": \"%s\" }, \"agent\": \"cpuminer-multi/0.1\"}, \"id\": 1}",
             user, pass, current_scratchpad_hi.height, bin2hex((const unsigned char*)current_scratchpad_hi.prevhash, 32));
     } else {
-        s = malloc(80 + strlen(user) + strlen(pass));
-        sprintf(s, "{\"id\": 2, \"method\": \"mining.authorize\", \"params\": [\"%s\", \"%s\"]}",
+        xasprintf(&s, "{\"id\": 2, \"method\": \"mining.authorize\", \"params\": [\"%s\", \"%s\"]}",
             user, pass);
     }
 
@@ -1144,7 +1138,7 @@ static bool stratum_notify(struct stratum_ctx *sctx, json_t *params)
     const char *job_id, *prevhash, *coinb1, *coinb2, *version, *nbits, *ntime;
     size_t coinb1_size, coinb2_size;
     bool clean, ret = false;
-    int merkle_count, i;
+    size_t merkle_count, i;
     json_t *merkle_arr;
     unsigned char **merkle;
 
@@ -1156,6 +1150,9 @@ static bool stratum_notify(struct stratum_ctx *sctx, json_t *params)
     if (!merkle_arr || !json_is_array(merkle_arr))
         goto out;
     merkle_count = json_array_size(merkle_arr);
+    if (merkle_count > SIZE_MAX / sizeof(char *)) {
+        fatal("merkle_count integer overflow %zu", merkle_count);
+    }
     version = json_string_value(json_array_get(params, 5));
     nbits = json_string_value(json_array_get(params, 6));
     ntime = json_string_value(json_array_get(params, 7));
@@ -1167,7 +1164,7 @@ static bool stratum_notify(struct stratum_ctx *sctx, json_t *params)
             applog(LOG_ERR, "Stratum notify: invalid parameters");
             goto out;
     }
-    merkle = malloc(merkle_count * sizeof(char *));
+    merkle = xmalloc(merkle_count * sizeof(char *));
     for (i = 0; i < merkle_count; i++) {
         const char *s = json_string_value(json_array_get(merkle_arr, i));
         if (!s || strlen(s) != 64) {
@@ -1177,7 +1174,7 @@ static bool stratum_notify(struct stratum_ctx *sctx, json_t *params)
             applog(LOG_ERR, "Stratum notify: invalid Merkle branch");
             goto out;
         }
-        merkle[i] = malloc(32);
+        merkle[i] = xmalloc(32);
         hex2bin(merkle[i], s, 32);
     }
 
@@ -1196,7 +1193,7 @@ static bool stratum_notify(struct stratum_ctx *sctx, json_t *params)
     hex2bin(sctx->job.xnonce2 + sctx->xnonce2_size, coinb2, coinb2_size);
 
     free(sctx->job.job_id);
-    sctx->job.job_id = strdup(job_id);
+    sctx->job.job_id = xstrdup(job_id);
     hex2bin(sctx->job.prevhash, prevhash, 32);
 
     for (i = 0; i < sctx->job.merkle_count; i++)
@@ -1254,8 +1251,7 @@ static bool stratum_reconnect(struct stratum_ctx *sctx, json_t *params)
     if (!host || !port)
         return false;
 
-    url = malloc(32 + strlen(host));
-    sprintf(url, "stratum+tcp://%s:%d", host, port);
+    xasprintf(&url, "stratum+tcp://%s:%d", host, port);
 
     if (!opt_redirect) {
         applog(LOG_INFO, "Ignoring request to reconnect to %s", url);
@@ -1376,10 +1372,7 @@ struct thread_q *tq_new(void)
 {
     struct thread_q *tq;
 
-    tq = calloc(1, sizeof(*tq));
-    if (!tq)
-        return NULL;
-
+    tq = xcalloc(1, sizeof(*tq));
     INIT_LIST_HEAD(&tq->q);
     pthread_mutex_init(&tq->mutex, NULL);
     pthread_cond_init(&tq->cond, NULL);
@@ -1431,10 +1424,7 @@ bool tq_push(struct thread_q *tq, void *data)
     struct tq_ent *ent;
     bool rc = true;
 
-    ent = calloc(1, sizeof(*ent));
-    if (!ent)
-        return false;
-
+    ent = xcalloc(1, sizeof(*ent));
     ent->data = data;
     INIT_LIST_HEAD(&ent->q_node);
 
