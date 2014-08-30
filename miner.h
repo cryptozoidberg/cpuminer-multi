@@ -301,7 +301,7 @@ struct stratum_job {
     size_t coinbase_size;
     unsigned char *coinbase;
     unsigned char *xnonce2;
-    int merkle_count;
+    size_t merkle_count;
     unsigned char **merkle;
     unsigned char version[4];
     unsigned char nbits[4];

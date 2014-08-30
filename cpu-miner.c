@@ -42,6 +42,7 @@
 #include <curl/curl.h>
 #include "compat.h"
 #include "miner.h"
+#include "xmalloc.h"
 
 #define PROGRAM_NAME		"minerd"
 #define LP_SCANTIME		60
@@ -382,9 +383,9 @@ static inline void work_free(struct work *w) {
 static inline void work_copy(struct work *dest, const struct work *src) {
     memcpy(dest, src, sizeof(struct work));
     if (src->job_id)
-        dest->job_id = strdup(src->job_id);
+        dest->job_id = xstrdup(src->job_id);
     if (src->xnonce2) {
-        dest->xnonce2 = malloc(src->xnonce2_len);
+        dest->xnonce2 = xmalloc(src->xnonce2_len);
         memcpy(dest->xnonce2, src->xnonce2, src->xnonce2_len);
     }
 }
@@ -636,12 +637,7 @@ bool addendum_decode(const json_t *addm)
         applog(LOG_ERR, "JSON wrong addm hex str len");
         return false;
     }
-    uint64_t* padd_buff = malloc(add_len/2);
-    if (!padd_buff)
-    {
-        applog(LOG_ERR, "out of memory, wanted %zu", add_len/2);
-        return false;
-    }
+    uint64_t* padd_buff = xmalloc(add_len/2);
 
     if(!hex2bin((unsigned char*)padd_buff, addm_hexstr, add_len/2))
     {
@@ -739,7 +735,7 @@ bool rpc2_job_decode(const json_t *job, struct work *work)
     if (blobLen != 0) 
     {
         pthread_mutex_lock(&rpc2_job_lock);
-        char *blob = malloc(blobLen / 2);
+        char *blob = xmalloc(blobLen / 2);
         if (!hex2bin(blob, hexblob, blobLen / 2)) 
         {
             applog(LOG_ERR, "JSON inval blob");
@@ -750,7 +746,7 @@ bool rpc2_job_decode(const json_t *job, struct work *work)
             free(rpc2_blob);
         }
         rpc2_bloblen = blobLen / 2;
-        rpc2_blob = malloc(rpc2_bloblen);
+        rpc2_blob = xmalloc(rpc2_bloblen);
         memcpy(rpc2_blob, blob, blobLen / 2);
 
         free(blob);
@@ -774,7 +770,7 @@ bool rpc2_job_decode(const json_t *job, struct work *work)
         if (rpc2_job_id) {
             free(rpc2_job_id);
         }
-        rpc2_job_id = strdup(job_id);
+        rpc2_job_id = xstrdup(job_id);
         pthread_mutex_unlock(&rpc2_job_lock);
     }
     if(work) 
@@ -789,9 +785,8 @@ bool rpc2_job_decode(const json_t *job, struct work *work)
         //*((uint64_t*)&work->target[6]) = rpc2_target;
         work->target[7] = rpc2_target;
 
-        if (work->job_id)
-            free(work->job_id);
-        work->job_id = strdup(rpc2_job_id);
+        free(work->job_id);
+        work->job_id = xstrdup(rpc2_job_id);
         stratum_have_work = true;
     }
     return true;
@@ -1185,9 +1180,7 @@ static bool workio_get_work(struct workio_cmd *wc, CURL *curl) {
     struct work *ret_work;
     int failures = 0;
 
-    ret_work = calloc(1, sizeof(*ret_work));
-    if (!ret_work)
-        return false;
+    ret_work = xcalloc(1, sizeof(*ret_work));
 
     /* obtain new work from bitcoin via JSON-RPC */
     while (!get_upstream_work(curl, ret_work)) {
@@ -1318,10 +1311,7 @@ static bool get_work(struct thr_info *thr, struct work *work) {
     }
 
     /* fill out work request message */
-    wc = calloc(1, sizeof(*wc));
-    if (!wc)
-        return false;
-
+    wc = xcalloc(1, sizeof(*wc));
     wc->cmd = WC_GET_WORK;
     wc->thr = thr;
 
@@ -1347,11 +1337,8 @@ static bool submit_work(struct thr_info *thr, const struct work *work_in) {
     struct workio_cmd *wc;
 
     /* fill out work request message */
-    wc = calloc(1, sizeof(*wc));
-    if (!wc)
-        return false;
-
-    wc->u.work = malloc(sizeof(*work_in));
+    wc = xcalloc(1, sizeof(*wc));
+    wc->u.work = xmalloc(sizeof(*work_in));
     if (!wc->u.work)
         goto err_out;
 
@@ -1373,7 +1360,7 @@ static void stratum_gen_work(struct stratum_ctx *sctx, struct work *work) {
     pthread_mutex_lock(&sctx->work_lock);
     free(work->job_id);
     memcpy(work, &sctx->work, sizeof(struct work));
-    work->job_id = strdup(sctx->work.job_id);
+    work->job_id = xstrdup(sctx->work.job_id);
     pthread_mutex_unlock(&sctx->work_lock);
 }
 
@@ -1533,13 +1520,14 @@ static void *longpoll_thread(void *userdata) {
         goto out;
     }
 
-start: hdr_path = tq_pop(mythr->q, NULL );
+start:
+    hdr_path = tq_pop(mythr->q, NULL );
     if (!hdr_path)
         goto out;
 
     /* full URL */
     if (strstr(hdr_path, "://")) {
-        lp_url = hdr_path;
+        lp_url = xstrdup(hdr_path);
         hdr_path = NULL;
     }
 
@@ -1549,11 +1537,7 @@ start: hdr_path = tq_pop(mythr->q, NULL );
         if (rpc_url[strlen(rpc_url) - 1] != '/')
             need_slash = true;
 
-        lp_url = malloc(strlen(rpc_url) + strlen(copy_start) + 2);
-        if (!lp_url)
-            goto out;
-
-        sprintf(lp_url, "%s%s%s", rpc_url, need_slash ? "/" : "", copy_start);
+        xasprintf(&lp_url, "%s%s%s", rpc_url, need_slash ? "/" : "", copy_start);
     }
 
     applog(LOG_INFO, "Long-polling activated for %s", lp_url);
@@ -1588,7 +1572,7 @@ start: hdr_path = tq_pop(mythr->q, NULL );
                 submit_old = soval ? json_is_true(soval) : false;
             }
             pthread_mutex_lock(&g_work_lock);
-            char *start_job_id = strdup(g_work.job_id);
+            char *start_job_id = xstrdup(g_work.job_id);
             if (work_decode(json_object_get(val, "result"), &g_work)) {
                 if (strcmp(start_job_id, g_work.job_id)) {
                     applog(LOG_INFO, "LONGPOLL detected new block");
@@ -1619,13 +1603,14 @@ start: hdr_path = tq_pop(mythr->q, NULL );
         }
     }
 
-out: free(hdr_path);
+out:
+    free(hdr_path);
     free(lp_url);
     tq_freeze(mythr->q);
     if (curl)
         curl_easy_cleanup(curl);
 
-    return NULL ;
+    return NULL;
 }
 
 bool store_scratchpad_to_file(bool do_fsync)
@@ -2081,7 +2066,7 @@ static void parse_arg(int key, char *arg) {
         break;
     case 'p':
         free(rpc_pass);
-        rpc_pass = strdup(arg);
+        rpc_pass = xstrdup(arg);
         break;
     case 'P':
         opt_protocol = true;
@@ -2118,7 +2103,7 @@ static void parse_arg(int key, char *arg) {
         break;
     case 'u':
         free(rpc_user);
-        rpc_user = strdup(arg);
+        rpc_user = xstrdup(arg);
         break;
     case 'o': /* --url */
         p = strstr(arg, "://");
@@ -2128,13 +2113,12 @@ static void parse_arg(int key, char *arg) {
                 && strncasecmp(arg, "stratum+tcp://", 14))
                 show_usage_and_exit(1);
             free(rpc_url);
-            rpc_url = strdup(arg);
+            rpc_url = xstrdup(arg);
         } else {
             if (!strlen(arg) || *arg == '/')
                 show_usage_and_exit(1);
             free(rpc_url);
-            rpc_url = malloc(strlen(arg) + 8);
-            sprintf(rpc_url, "http://%s", arg);
+            xasprintf(&rpc_url, "http://%s", arg);
         }
         p = strrchr(rpc_url, '@');
         if (p) {
@@ -2144,15 +2128,15 @@ static void parse_arg(int key, char *arg) {
             sp = strchr(ap, ':');
             if (sp) {
                 free(rpc_userpass);
-                rpc_userpass = strdup(ap);
+                rpc_userpass = xstrdup(ap);
                 free(rpc_user);
-                rpc_user = calloc(sp - ap + 1, 1);
+                rpc_user = xcalloc(sp - ap + 1, 1);
                 strncpy(rpc_user, ap, sp - ap);
                 free(rpc_pass);
-                rpc_pass = strdup(sp + 1);
+                rpc_pass = xstrdup(sp + 1);
             } else {
                 free(rpc_user);
-                rpc_user = strdup(ap);
+                rpc_user = xstrdup(ap);
             }
             memmove(ap, p + 1, strlen(p + 1) + 1);
         }
@@ -2163,12 +2147,12 @@ static void parse_arg(int key, char *arg) {
         if (!p)
             show_usage_and_exit(1);
         free(rpc_userpass);
-        rpc_userpass = strdup(arg);
+        rpc_userpass = xstrdup(arg);
         free(rpc_user);
-        rpc_user = calloc(p - arg + 1, 1);
+        rpc_user = xcalloc(p - arg + 1, 1);
         strncpy(rpc_user, arg, p - arg);
         free(rpc_pass);
-        rpc_pass = strdup(p + 1);
+        rpc_pass = xstrdup(p + 1);
         break;
     case 'x': /* --proxy */
         if (!strncasecmp(arg, "socks4://", 9))
@@ -2184,11 +2168,11 @@ static void parse_arg(int key, char *arg) {
         else
             opt_proxy_type = CURLPROXY_HTTP;
         free(opt_proxy);
-        opt_proxy = strdup(arg);
+        opt_proxy = xstrdup(arg);
         break;
     case 1001:
         free(opt_cert);
-        opt_cert = strdup(arg);
+        opt_cert = xstrdup(arg);
         break;
     case 1005:
         opt_benchmark = true;
@@ -2235,9 +2219,7 @@ static void parse_config(void) {
             continue;
 
         if (options[i].has_arg && json_is_string(val)) {
-            char *s = strdup(json_string_value(val));
-            if (!s)
-                break;
+            char *s = xstrdup(json_string_value(val));
             parse_arg(options[i].val, s);
             free(s);
         } else if (!options[i].has_arg && json_is_true(val))
@@ -2338,8 +2320,8 @@ int main(int argc, char *argv[]) {
     int i;
 	char cachedir[PATH_MAX];
 
-    rpc_user = strdup("");
-    rpc_pass = strdup("");
+    rpc_user = xstrdup("");
+    rpc_pass = xstrdup("");
 
     tzset();
 
@@ -2400,12 +2382,7 @@ int main(int argc, char *argv[]) {
 	{
 		applog(LOG_INFO, "hugetlb not available");
 #endif
-		pscratchpad_buff = malloc(sz);
-		if(!pscratchpad_buff)
-		{
-			applog(LOG_ERR, "scratchpad allocation failed");
-			return 1;
-		}
+		pscratchpad_buff = xmalloc(sz);
 #if !defined(_WIN64) && !defined(_WIN32)
 	} else {
 		applog(LOG_INFO, "using hugetlb");
@@ -2437,10 +2414,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (!rpc_userpass) {
-        rpc_userpass = malloc(strlen(rpc_user) + strlen(rpc_pass) + 2);
-        if (!rpc_userpass)
-            return 1;
-        sprintf(rpc_userpass, "%s:%s", rpc_user, rpc_pass);
+        xasprintf(&rpc_userpass, "%s:%s", rpc_user, rpc_pass);
     }
 
     flags = !opt_benchmark && strncmp(rpc_url, "https:", 6) ?
@@ -2492,17 +2466,9 @@ int main(int argc, char *argv[]) {
         openlog("cpuminer", LOG_PID, LOG_USER);
 #endif
 
-    work_restart = calloc(opt_n_threads, sizeof(*work_restart));
-    if (!work_restart)
-        return 1;
-
-    thr_info = calloc(opt_n_threads + 3, sizeof(*thr));
-    if (!thr_info)
-        return 1;
-
-    thr_hashrates = (double *) calloc(opt_n_threads, sizeof(double));
-    if (!thr_hashrates)
-        return 1;
+    work_restart = xcalloc(opt_n_threads, sizeof(*work_restart));
+    thr_info = xcalloc(opt_n_threads + 3, sizeof(*thr));
+    thr_hashrates = xcalloc(opt_n_threads, sizeof(double));
 
     /* init workio thread info */
     work_thr_id = opt_n_threads;
@@ -2549,7 +2515,7 @@ int main(int argc, char *argv[]) {
         }
 
         if (have_stratum)
-            tq_push(thr_info[stratum_thr_id].q, strdup(rpc_url));
+            tq_push(thr_info[stratum_thr_id].q, xstrdup(rpc_url));
     }
 
     /* start mining threads */

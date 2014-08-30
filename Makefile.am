@@ -20,7 +20,8 @@ minerd_SOURCES	= elist.h \
 		  compat.h \
 		  cpu-miner.c \
 		  util.c \
-		  wildkeccak.c
+		  wildkeccak.c \
+		  xmalloc.c
 
 minerd_LDFLAGS	= $(PTHREAD_FLAGS) 
 minerd_LDADD	= @LIBCURL@ @JANSSON_LIBS@ @PTHREAD_LIBS@ @WS2_LIBS@
