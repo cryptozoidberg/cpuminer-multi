@@ -130,10 +130,20 @@ When the --proxy option is not used, the program honors the http_proxy and all_p
 
 Donations
 =========
+
+-Donations for the work done in this fork by zoidberg are accepted at
+* BBR: `@zoidberg`
+* BTC: `1JjGoHdzP5HvtyEZ6MN9LXbh8uTDVgrPY9`
+
 Donations for the work done in this fork by otila are accepted at
-* MRO: `46i538G1mrxAjzvP7cqKNufPoYAmmZyX5NidEcpmEjqgGB8F8vmRax3SuipJ3zkEkkFYQHjM58zDeXyoNgxVVGby4JMGwZt`
 * BBR: `@anonymous`
+* XMR: `46i538G1mrxAjzvP7cqKNufPoYAmmZyX5NidEcpmEjqgGB8F8vmRax3SuipJ3zkEkkFYQHjM58zDeXyoNgxVVGby4JMGwZt`
 * BTC: `1Gpa1DteQozR4Mw94mjZRGb6McaNT6nrTC`
+
+Donations for the work done in this fork by Wolf are accepted at
+* BBR: `@wolf`
+* XMR: `46sSETXrZGT8bupxdc2MAbLe3PMV9nJTRTE5uaFErXFz6ymyzVdH86KDb9TNoG4ny5QLELfopynWeBSMoT1M2Ga8RBkDqTH`
+* BTC: `1WoLFumNUvjCgaCyjFzvFrbGfDddYrKNR`
 
 Credits
 =======
