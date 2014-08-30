@@ -17,6 +17,7 @@
 
 enum {
   HASH_SIZE = 32,
+  HASH_DATA_AREA = 136,
 };
 
 #define KK_MIXIN_SIZE 24
@@ -75,7 +76,7 @@ static __always_inline void keccakf_mul(uint64_t *s)
 	s[0] ^= 0x0000000000000001ULL;
 }
 
-static __always_inline void wildkeccak(uint64_t *restrict st, const uint64_t *restrict pscr, uint64_t scr_size, struct reciprocal_value64 recip)
+static void wildkeccak(uint64_t *restrict st, const uint64_t *restrict pscr, uint64_t scr_size, struct reciprocal_value64 recip)
 {
     uint64_t x, i = 0;
     uint64_t idx[KK_MIXIN_SIZE];
@@ -134,18 +135,33 @@ static void __always_inline wild_keccak_hash_dbl(const uint8_t *in, size_t inlen
 {
     uint64_t st[25] __aligned(32);
     struct reciprocal_value64 recip;
+    uint8_t temp[144];    
+    size_t i;
+    const size_t rsiz = HASH_DATA_AREA;
+    const size_t rsizw = HASH_DATA_AREA / 8;
 
     scr_size >>= 2; /* scr_size now in crypto::hash units (32 bytes) */
     recip = reciprocal_value64(scr_size);
 
     // Wild Keccak #1
-    memcpy(st, in, 81);
-    memset(&st[11], 0, 112);
-    st[10] = (st[10] & 0x00000000000000FFULL) | 0x0000000000000100ULL;
-    st[16] |= 0x8000000000000000ULL;
+    memset(st, 0, sizeof(st));
+    for ( ; inlen >= rsiz; inlen -= rsiz, in += rsiz) {
+        for (i = 0; i < rsizw; i++)
+            st[i] ^= ((uint64_t *) in)[i];
+        wildkeccak(st, pscr, scr_size, recip);
+    }
+    // last block and padding
+    memcpy(temp, in, inlen);
+    temp[inlen++] = 1;
+    memset(temp + inlen, 0, rsiz - inlen);
+    temp[rsiz - 1] |= 0x80;
+
+    for (i = 0; i < rsizw; i++) {
+        st[i] ^= ((uint64_t *) temp)[i];
+    }
     wildkeccak(st, pscr, scr_size, recip);
 
-    // Wild Keccak #2 - st[0]..st[3] contains resulting hash of #1
+    // Wild Keccak #2 - st[0]..st[3] already contains resulting hash of #1
     memset(&st[5], 0, 160);
     st[4] = 0x0000000000000001ULL;
     st[16] |= 0x8000000000000000ULL;
