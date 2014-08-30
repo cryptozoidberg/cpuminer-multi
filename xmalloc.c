@@ -13,16 +13,32 @@
  * called by a name other than "ssh" or "Secure Shell".
  */
 
-#include "includes.h"
+#ifndef _GNU_SOURCE /* vasprintf */
+#define _GNU_SOURCE
+#endif
 
-#include <sys/param.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
+#include <unistd.h>
 
 #include "xmalloc.h"
-#include "log.h"
+
+#define MSGBUFSIZ 1024
+
+void fatal(const char *fmt,...)
+{
+        va_list args;
+        char msgbuf[MSGBUFSIZ];
+
+        va_start(args, fmt);
+        vsnprintf(msgbuf, sizeof(msgbuf), fmt, args);
+        fprintf(stderr, "%s\n", msgbuf);
+        va_end(args);
+        _exit(EXIT_FAILURE);
+}
 
 void *
 xmalloc(size_t size)
@@ -44,8 +60,8 @@ xcalloc(size_t nmemb, size_t size)
 
 	if (size == 0 || nmemb == 0)
 		fatal("xcalloc: zero size");
-	if (SIZE_T_MAX / nmemb < size)
-		fatal("xcalloc: nmemb * size > SIZE_T_MAX");
+	if (SIZE_MAX / nmemb < size)
+		fatal("xcalloc: nmemb * size > SIZE_MAX");
 	ptr = calloc(nmemb, size);
 	if (ptr == NULL)
 		fatal("xcalloc: out of memory (allocating %zu bytes)",
@@ -61,8 +77,8 @@ xrealloc(void *ptr, size_t nmemb, size_t size)
 
 	if (new_size == 0)
 		fatal("xrealloc: zero size");
-	if (SIZE_T_MAX / nmemb < size)
-		fatal("xrealloc: nmemb * size > SIZE_T_MAX");
+	if (SIZE_MAX / nmemb < size)
+		fatal("xrealloc: nmemb * size > SIZE_MAX");
 	if (ptr == NULL)
 		new_ptr = malloc(new_size);
 	else
@@ -81,7 +97,7 @@ xstrdup(const char *str)
 
 	len = strlen(str) + 1;
 	cp = xmalloc(len);
-	strlcpy(cp, str, len);
+	strcpy(cp, str);
 	return cp;
 }
 

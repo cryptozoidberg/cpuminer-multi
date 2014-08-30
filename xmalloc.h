@@ -1,3 +1,5 @@
+#pragma once
+
 /* $OpenBSD: xmalloc.h,v 1.14 2013/05/17 00:13:14 djm Exp $ */
 
 /*
@@ -23,3 +25,6 @@ char	*xstrdup(const char *);
 int	 xasprintf(char **, const char *, ...)
                 __attribute__((__format__ (printf, 2, 3)))
                 __attribute__((__nonnull__ (2)));
+void     fatal(const char *, ...) __attribute__((noreturn))
+        __attribute__((format(printf, 1, 2)));
+
