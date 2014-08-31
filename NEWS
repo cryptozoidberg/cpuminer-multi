@@ -1,3 +1,6 @@
+Version 2.3.3.1 - Aug 31, 2014
+- Remove every other algo except wildkeccak
+
 Version 2.3.3 - Feb 27, 2014
 
 - The --url option is now mandatory

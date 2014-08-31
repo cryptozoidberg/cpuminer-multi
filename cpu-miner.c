@@ -105,31 +105,11 @@ struct workio_cmd {
 };
 
 enum mining_algo {
-    ALGO_SCRYPT,      /* scrypt(1024,1,1) */
-    ALGO_SHA256D,     /* SHA-256d */
-    ALGO_KECCAK,      /* Keccak */
-    ALGO_HEAVY,       /* Heavy */
-    ALGO_QUARK,       /* Quark */
-    ALGO_SKEIN,       /* Skein */
-    ALGO_SHAVITE3,    /* Shavite3 */
-    ALGO_BLAKE,       /* Blake */
-    ALGO_X11,         /* X11 */
     ALGO_WILD_KECCAK, /* Boolberry */
-    ALGO_CRYPTONIGHT, /* CryptoNight */    
 };
 
 static const char *algo_names[] = {
-    [ALGO_SCRYPT] =      "scrypt",
-    [ALGO_SHA256D] =     "sha256d",
-    [ALGO_KECCAK] =      "keccak",
-    [ALGO_HEAVY] =       "heavy",
-    [ALGO_QUARK] =       "quark",
-    [ALGO_SKEIN] =       "skein",
-    [ALGO_SHAVITE3] =    "shavite3",
-    [ALGO_BLAKE] =       "blake",
-    [ALGO_X11] =         "x11",
     [ALGO_WILD_KECCAK] = "wildkeccak",
-    [ALGO_CRYPTONIGHT] = "cryptonight",
 };
 
 bool opt_debug = false;
@@ -215,17 +195,7 @@ static char const usage[] =
     Usage: " PROGRAM_NAME " [OPTIONS]\n\
     Options:\n\
     -a, --algo=ALGO       specify the algorithm to use\n\
-    scrypt       scrypt(1024, 1, 1) (default)\n\
-    sha256d      SHA-256d\n\
-    keccak       Keccak\n\
-    quark        Quark\n\
-    heavy        Heavy\n\
-    skein        Skein\n\
-    shavite3     Shavite3\n\
-    blake        Blake\n\
-    x11          X11\n\
-    cryptonight  CryptoNight\n\
-    wildkeccak   WildKeccak\n\
+                            wildkeccak   WildKeccak\n\
     -k  --scratchpad=URL  URL of inital scratchpad file\n\
     -l  --scratchpad_local_cache=PATH  PATH to local scratchpad file\n\
     -o, --url=URL         URL of mining server\n\
@@ -269,7 +239,7 @@ static char const short_options[] =
 #ifdef HAVE_SYSLOG_H
     "S"
 #endif
-    "a:c:Dhp:Px:qr:R:s:t:T:o:u:O:V:k:l";
+    "a:c:Dhp:Px:qr:R:s:t:T:o:u:O:Vk:l:";
 
 static struct option const options[] = {
     { "algo", 1, NULL, 'a' },
