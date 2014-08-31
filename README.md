@@ -1,8 +1,6 @@
 CPUMiner-Multi
 ==============
 
-[![Build Status](https://travis-ci.org/LucasJones/cpuminer-multi.svg?branch=master)](https://travis-ci.org/LucasJones/cpuminer-multi)
-
 This is a multi-threaded CPU miner,
 fork of [pooler](//github.com/pooler)'s cpuminer.
 
@@ -20,32 +18,12 @@ fork of [pooler](//github.com/pooler)'s cpuminer.
 Algorithms
 ==========
 #### Currently supported
- * ✓ __scrypt__ (Litecoin, Dogecoin, Feathercoin, etc..)
- * ✓ __sha256d__ (Bitcoin, Freicoin, Peercoin/PPCoin, Terracoin, etc..)
- * ✓ __x11__ (Darkcoin [DRK], Hirocoin, Limecoin)
- * ✓ __cryptonight__ (Bytecoin [BCN], Monero)
  * ✓ __wildkeccak__ (Boolberry [BBR])
-
-
-#### Implemented, but untested
- * ? keccak (Maxcoin  HelixCoin, CryptoMeth, Galleon, 365coin, Slothcoin, BitcointalkCoin)
- * ? hefty1 (Heavycoin)
- * ? quark (Quarkcoin)
- * ? skein (Skeincoin, Myriadcoin)
- * ? shavite3 (INKcoin)
- * ? blake (Blakecoin)
-
-#### Planned support for
- * *scrypt-n* (Vertcoin [VTC])
- * *scrypt-jane* (YaCoin, CopperBars, Pennies, Tickets, etc..)
- * *qubit* (Qubitcoin, Myriadcoin)
- * *groestl* (Groestlcoin)
 
 Dependencies
 ============
 * libcurl			http://curl.haxx.se/libcurl/
 * jansson			http://www.digip.org/jansson/ (jansson is included in-tree)
-* openssl           https://www.openssl.org/
 
 Download
 ========
@@ -64,6 +42,7 @@ Build
 # Use -march=native if building for a single machine
 make
 ```
+* Static linking is not supported.
 
 #### Notes for AIX users:
  * To build a 64-bit binary, `export OBJECT_MODE=64`
@@ -97,22 +76,18 @@ make
  * ARM:
    * No runtime CPU detection. The miner can take advantage of some instructions specific to ARMv5E and later processors, but the decision whether to use them is made at compile time, based on compiler-defined macros.
    * To use NEON instructions, add "-mfpu=neon" to CFLAGS.
- * x86:
-   * The miner checks for SSE2 instructions support at runtime, and uses them if they are available.
  * x86-64:	
-   * The miner can take advantage of AVX, AVX2 and XOP instructions, but only if both the CPU and the operating system support them.
-     * Linux supports AVX starting from kernel version 2.6.30.
-     * FreeBSD supports AVX starting with 9.1-RELEASE.
-     * Mac OS X added AVX support in the 10.6.8 update.
-     * Windows supports AVX starting from Windows 7 SP1 and Windows Server 2008 R2 SP1.
-   * The configure script outputs a warning if the assembler doesn't support some instruction sets. In that case, the miner can still be built, but unavailable optimizations are left off.
+   * The miner can take advantage of SSE2 and AVX2 instructions, but only if both the CPU and the operating system support them.
+   * There is no runtime check for the features, so minerd compiled on CPU with
+   * AVX2 support causes Invalid opcode trap when run on CPU without AVX2 support (patches accepted).
 
 Usage instructions
 ==================
 ```sh
-./minerd -a wildkeccak -o stratum+tcp://url_to_server:7778 -u 1L1ZPC9XodC6g5BX8j8m3vcdkXPiZrVF7RcERWE879coQDWiztUbkkVZ86o43P27Udb3qxL4B41gbaGpvj3nS7DgFZauAZE  -p x -P -D -t 1 -k https://raw.githubusercontent.com/scratchpadbbr/scratchpad/master/scratchpad.bin --scratchpad_local_cache=/home/roky/cpuminer-multi/s.bin
+./minerd -o stratum+tcp://url_to_server:7778 -u 1L1ZPC9XodC6g5BX8j8m3vcdkXPiZrVF7RcERWE879coQDWiztUbkkVZ86o43P27Udb3qxL4B41gbaGpvj3nS7DgFZauAZE  -p x -P -D -t 1 -k http://url_to_server/download/scratchpad.bin
 ```
-Run "minerd --help" to see options.
+Visit url_to_server to verify scratchpad.bin download location.
+Run "minerd --help" to see more options.
 
 
 
@@ -147,7 +122,8 @@ Donations for the work done in this fork by Wolf are accepted at
 
 Credits
 =======
-CPUMiner-multi was forked from Lucas Jones's cpuminer-multi, and has been developed by Cryptozoidberg.
+CPUMiner-multi was forked from Lucas Jones's cpuminer-multi, and has been developed by
+Cryptozoidberg, otila, and Wolf.
 
 License
 =======
