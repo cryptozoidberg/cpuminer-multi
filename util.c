@@ -977,7 +977,8 @@ bool stratum_getscratchpad(struct stratum_ctx *sctx) {
     json_error_t err;
     bool ret = false;
 
-    xasprintf(&s, "{\"method\": \"getfullscratchpad\", \"params\": {\"id\": \"%s\", \"agent\": \"cpuminer-multi/0.1\"}, \"id\": 1}", rpc2_id);
+    xasprintf(&s, "{\"method\": \"getfullscratchpad\", \"params\": {\"id\": \"%s\", \"agent\": \"%s\"}, \"id\": 1}",
+              rpc2_id, USER_AGENT);
     applog(LOG_INFO, "Getting full scratchpad....");
     if (!stratum_send_line(sctx, s))
         goto out;
@@ -1017,8 +1018,9 @@ bool stratum_request_job(struct stratum_ctx *sctx)
     if(jsonrpc_2) {
         /* sizeof(s)-1 because send_line appends '\n' */
         snprintf(s, sizeof(s)-1, "{\"method\": \"getjob\", \"params\": {\"id\": \"%s\", \"hi\": { \"height\": %" PRIu64
-                 ", \"block_id\": \"%s\" }, \"agent\": \"cpuminer-multi/0.1\"}, \"id\": 1}",
-                 rpc2_id, current_scratchpad_hi.height, bin2hex((const unsigned char*)current_scratchpad_hi.prevhash, 32));
+                 ", \"block_id\": \"%s\" }, \"agent\": \"%s\"}, \"id\": 1}",
+                 rpc2_id, current_scratchpad_hi.height, bin2hex((const unsigned char*)current_scratchpad_hi.prevhash, 32),
+                 USER_AGENT);
 
     } else {
         return false;
@@ -1071,8 +1073,9 @@ bool stratum_authorize(struct stratum_ctx *sctx, const char *user, const char *p
     bool ret = false;
 
     if(jsonrpc_2) {
-        xasprintf(&s, "{\"method\": \"login\", \"params\": {\"login\": \"%s\", \"pass\": \"%s\", \"hi\": { \"height\": %" PRIu64 ", \"block_id\": \"%s\" }, \"agent\": \"cpuminer-multi/0.1\"}, \"id\": 1}",
-            user, pass, current_scratchpad_hi.height, bin2hex((const unsigned char*)current_scratchpad_hi.prevhash, 32));
+        xasprintf(&s, "{\"method\": \"login\", \"params\": {\"login\": \"%s\", \"pass\": \"%s\", \"hi\": { \"height\": %" PRIu64 ", \"block_id\": \"%s\" }, \"agent\": \"%s\"}, \"id\": 1}",
+            user, pass, current_scratchpad_hi.height, bin2hex((const unsigned char*)current_scratchpad_hi.prevhash, 32),
+            USER_AGENT);
     } else {
         xasprintf(&s, "{\"id\": 2, \"method\": \"mining.authorize\", \"params\": [\"%s\", \"%s\"]}",
             user, pass);
