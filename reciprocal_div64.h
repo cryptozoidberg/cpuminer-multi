@@ -3,7 +3,7 @@
 
 #include <immintrin.h>
 
-#include "bitops.h"
+#include "helper.h"
 
 /*
  * This algorithm is based on the paper "Division by Invariant
@@ -32,7 +32,8 @@ static inline struct reciprocal_value64 reciprocal_value64(u64 d)
 	__uint128_t m;
 	int l;
 
-	l = fls64(d - 1);
+	BUILD_BUG_ON((sizeof(unsigned long long)) != (sizeof(u64)));
+	l = ((sizeof(unsigned long long)*8)) - __builtin_clzll(d - 1);
 	m = (((__uint128_t)1 << 64) * ((1ULL << l) - d));
         m /= d;
 	++m;
