@@ -29,7 +29,7 @@ minerd_CPPFLAGS = @LIBCURL_CPPFLAGS@
 minerd_CFLAGS   = -std=gnu11 -O3 -march=native -fPIC -flto
 
 if HAVE_WINDOWS
-minerd_CFLAGS += -Wl,--stack,10485760 -DCURL_STATICLIB
+minerd_CFLAGS += -Wl,--stack,10485760 -DCURL_STATICLIB -D__USE_MINGW_ANSI_STDIO=1
 endif
 
 if !HAVE_WINDOWS
