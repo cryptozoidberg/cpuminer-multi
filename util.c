@@ -849,7 +849,7 @@ void stratum_disconnect(struct stratum_ctx *sctx)
 static const char *get_stratum_session_id(json_t *val)
 {
     json_t *arr_val;
-    int i, n;
+    size_t i, n;
 
     arr_val = json_array_get(val, 0);
     if (!arr_val || !json_is_array(arr_val))

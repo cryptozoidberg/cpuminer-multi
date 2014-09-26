@@ -657,8 +657,13 @@ bool addendums_decode(const json_t *job)
         return false;
     }
 
-    unsigned int add_sz = json_array_size(paddms);
-    for (int i = 0; i < add_sz; i++) 
+    size_t add_sz = json_array_size(paddms);
+    if (add_sz > 720) {
+        /* scratchpad over one day old, force save */
+        prev_save = 0;
+    }
+
+    for (size_t i = 0; i < add_sz; i++) 
     {
         json_t *addm = json_array_get(paddms, i);
         if (!addm ) 
@@ -1837,6 +1842,7 @@ static void *stratum_thread(void *userdata) {
                 applog(LOG_ERR, "...retry after %d seconds", opt_fail_pause);
                 sleep(opt_fail_pause);
             }
+
             store_scratchpad_to_file(false);
             prev_save = time(NULL);
 
@@ -1847,7 +1853,8 @@ static void *stratum_thread(void *userdata) {
                 sleep(opt_fail_pause);
             }
         }
-        /* save every 12 hours */
+
+        /* save every 12 hours or if we just received over 720 addendums */
         if ((time(NULL) - prev_save) > 12*3600)
         {
             store_scratchpad_to_file(false);
