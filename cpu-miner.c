@@ -284,7 +284,7 @@ static void workio_cmd_free(struct workio_cmd *wc);
 
 json_t *json_rpc2_call_recur(CURL *curl, const char *url,
                              const char *userpass, json_t *rpc_req,
-                             int *curl_err, int flags, int recur) 
+                             int *curl_err, int flags, int recur)
 {
     if(recur >= 5) {
         if(opt_debug)
@@ -313,7 +313,7 @@ json_t *json_rpc2_call_recur(CURL *curl, const char *url,
         message = error;
     else
         message = json_object_get(error, "message");
-    if(!message || !json_is_string(message)) 
+    if(!message || !json_is_string(message))
         goto end;
     const char *mes = json_string_value(message);
     if(!strcmp(mes, "Unauthenticated")) {
@@ -339,7 +339,7 @@ end:
 
 json_t *json_rpc2_call(CURL *curl, const char *url,
                        const char *userpass, const char *rpc_req,
-                       int *curl_err, int flags) 
+                       int *curl_err, int flags)
 {
                            return json_rpc2_call_recur(curl, url, userpass, JSON_LOADS(rpc_req, NULL),
                                curl_err, flags, 0);
@@ -361,7 +361,7 @@ static inline void work_copy(struct work *dest, const struct work *src) {
 }
 
 static bool jobj_binary(const json_t *obj, const char *key, void *buf,
-                        size_t buflen) 
+                        size_t buflen)
 {
     const char *hexstr;
     json_t *tmp;
@@ -438,7 +438,7 @@ bool parse_height_info(const json_t *hi_section, struct scratchpad_hi* phi)
     memcpy(phi->prevhash, prevhash, 32);
 
     return true;
-err_out: 
+err_out:
     return false;
 }
 
@@ -505,7 +505,7 @@ bool revert_scratchpad()
     //playback scratchpad addendums for whole add_arr
     size_t i_ = 0;
     size_t i = 0;
-    size_t arr_size = ARRAY_SIZE(add_arr); 
+    size_t arr_size = ARRAY_SIZE(add_arr);
 
     for(i_=0; i_ != arr_size; i_++)
     {
@@ -532,7 +532,7 @@ bool push_addendum_info(struct scratchpad_hi* pprev_hi, uint64_t size /* uint64 
 
     if(i >= arr_size)
     {//shift array
-        memmove(&add_arr[0], &add_arr[1], (arr_size-1)*sizeof(add_arr[0]));   
+        memmove(&add_arr[0], &add_arr[1], (arr_size-1)*sizeof(add_arr[0]));
         i = arr_size - 1;
     }
     add_arr[i].prev_hi = *pprev_hi;
@@ -663,10 +663,10 @@ bool addendums_decode(const json_t *job)
         prev_save = 0;
     }
 
-    for (size_t i = 0; i < add_sz; i++) 
+    for (size_t i = 0; i < add_sz; i++)
     {
         json_t *addm = json_array_get(paddms, i);
-        if (!addm ) 
+        if (!addm)
         {
             applog(LOG_ERR, "Internal error: failed to get addm");
             return false;
@@ -678,7 +678,7 @@ bool addendums_decode(const json_t *job)
     return true;
 }
 
-bool rpc2_job_decode(const json_t *job, struct work *work) 
+bool rpc2_job_decode(const json_t *job, struct work *work)
 {
     if (!jsonrpc_2) {
         applog(LOG_ERR, "Tried to decode job without JSON-RPC 2.0");
@@ -706,16 +706,16 @@ bool rpc2_job_decode(const json_t *job, struct work *work)
     }
     const char *hexblob = json_string_value(tmp);
     int blobLen = strlen(hexblob);
-    if (blobLen % 2 != 0 || ((blobLen / 2) < 40 && blobLen != 0) || (blobLen / 2) > 128) 
+    if (blobLen % 2 != 0 || ((blobLen / 2) < 40 && blobLen != 0) || (blobLen / 2) > 128)
     {
         applog(LOG_ERR, "JSON invalid blob length");
         goto err_out;
     }
-    if (blobLen != 0) 
+    if (blobLen != 0)
     {
         pthread_mutex_lock(&rpc2_job_lock);
         char *blob = xmalloc(blobLen / 2);
-        if (!hex2bin(blob, hexblob, blobLen / 2)) 
+        if (!hex2bin(blob, hexblob, blobLen / 2))
         {
             applog(LOG_ERR, "JSON inval blob");
             pthread_mutex_unlock(&rpc2_job_lock);
@@ -752,7 +752,7 @@ bool rpc2_job_decode(const json_t *job, struct work *work)
         rpc2_job_id = xstrdup(job_id);
         pthread_mutex_unlock(&rpc2_job_lock);
     }
-    if(work) 
+    if(work)
     {
         if (!rpc2_blob) {
             applog(LOG_ERR, "Requested work before work was received");
@@ -858,7 +858,7 @@ bool rpc2_getfullscratchpad_decode(const json_t *val) {
         goto err_out;
     }
 
-    //check status    
+    //check status
     status = get_json_string_param(res, "status");
     if (!status ) {
         applog(LOG_ERR, "JSON status is not a string");
@@ -943,7 +943,7 @@ static bool submit_upstream_work(CURL *curl, struct work *work) {
 
     /* pass if the previous hash is not the current previous hash */
     if (!submit_old && memcmp(work->data + 1 + 8,
-                              g_work.data + 1 + 8, 32)) 
+                              g_work.data + 1 + 8, 32))
     {
         if (opt_debug)
             applog(LOG_DEBUG, "DEBUG: stale work detected, discarding");
@@ -1589,7 +1589,7 @@ out:
 bool store_scratchpad_to_file(bool do_fsync)
 {
     FILE *fp;
-    char file_name_buff[PATH_MAX];  
+    char file_name_buff[PATH_MAX];
     int ret;
 
     if(!scratchpad_size) return true;
@@ -1647,7 +1647,7 @@ bool load_scratchpad_from_file(const char *fname)
     FILE *fp;
     struct stat file_stat;
 
-    if(stat(fname, &file_stat) < 0)    
+    if(stat(fname, &file_stat) < 0)
     {
         applog(LOG_ERR, "fstat error from %s: %s", fname, strerror(errno));
         return false;
@@ -1659,7 +1659,7 @@ bool load_scratchpad_from_file(const char *fname)
     }
 
     fp = fopen(fname, "rb");
-    if (fp == NULL) 
+    if (fp == NULL)
     {
         if (errno != ENOENT) {
             applog(LOG_ERR, "failed to load %s: %s", fname, strerror(errno));
@@ -1675,7 +1675,7 @@ bool load_scratchpad_from_file(const char *fname)
         return false;
     }
 
-    if ((fh.scratchpad_size*8 > (WILD_KECCAK_SCRATCHPAD_BUFFSIZE)) ||(fh.scratchpad_size%4)) 
+    if ((fh.scratchpad_size*8 > (WILD_KECCAK_SCRATCHPAD_BUFFSIZE)) ||(fh.scratchpad_size%4))
     {
         applog(LOG_ERR, "file %s size invalid (%" PRIu64 "), max=%zu",
                fname, fh.scratchpad_size*8, (size_t)WILD_KECCAK_SCRATCHPAD_BUFFSIZE);
@@ -1693,7 +1693,7 @@ bool load_scratchpad_from_file(const char *fname)
     current_scratchpad_hi = fh.current_hi;
     memcpy(&add_arr[0], &fh.add_arr[0], sizeof(fh.add_arr));
 
-    applog(LOG_DEBUG, "loaded scratchpad %s (%zu bytes), height=%" PRIu64, fname, 
+    applog(LOG_DEBUG, "loaded scratchpad %s (%zu bytes), height=%" PRIu64, fname,
            scratchpad_size*8, current_scratchpad_hi.height);
     fclose(fp);
     prev_save = time(NULL);
@@ -1706,7 +1706,7 @@ static bool try_mkdir_chdir(const char *dirn)
         if (errno == ENOENT) {
 #if defined(_WIN32) || defined(_WIN64)
             if (mkdir(dirn) == -1) {
-#else 
+#else
             if (mkdir(dirn, 0700) == -1) {
 #endif
                 applog(LOG_ERR, "mkdir failed: %s", strerror(errno));
@@ -1745,7 +1745,7 @@ static bool stratum_handle_response(char *buf) {
 
     if (jsonrpc_2) {
         json_t *status = NULL;
-        if(res_val) 
+        if(res_val)
             status = json_object_get(res_val, "status");
         if(status) {
             const char *s = json_string_value(status);
@@ -1769,7 +1769,7 @@ static bool stratum_handle_response(char *buf) {
             } else {
               need_to_rerequest_job = true;
             }
-            
+
             stratum_have_work = false;
             restart_threads();
         }
@@ -1862,7 +1862,7 @@ static void *stratum_thread(void *userdata) {
         }
 
         if (jsonrpc_2) {
-            if (stratum.work.job_id && (!g_work_time || strcmp(stratum.work.job_id, g_work.job_id))) 
+            if (stratum.work.job_id && (!g_work_time || strcmp(stratum.work.job_id, g_work.job_id)))
             {
                 pthread_mutex_lock(&g_work_lock);
                 stratum_gen_work(&stratum, &g_work);
@@ -2204,7 +2204,7 @@ static void signal_handler(int sig) {
 }
 #endif
 
-size_t write_data(void *ptr, size_t size, size_t nmemb, FILE *stream) 
+size_t write_data(void *ptr, size_t size, size_t nmemb, FILE *stream)
 {
     size_t written = fwrite(ptr, size, nmemb, stream);
     return written;
@@ -2252,7 +2252,7 @@ int main(int argc, char *argv[]) {
     struct thr_info *thr;
     long flags;
     int i;
-	char cachedir[PATH_MAX];
+    char cachedir[PATH_MAX];
 
     rpc_user = xstrdup("");
     rpc_pass = xstrdup("");
@@ -2269,78 +2269,72 @@ int main(int argc, char *argv[]) {
     /* parse command line */
     parse_cmdline(argc, argv);
 
-	jsonrpc_2 = true;
-	if(!pscratchpad_local_cache)
-	{
+    jsonrpc_2 = true;
+    if(!pscratchpad_local_cache) {
 #if defined(_WIN64) || defined(_WIN32)
-		const char* phome_var_name = "LOCALAPPDATA";
-#else 
-		const char* phome_var_name = "HOME";
+        const char* phome_var_name = "LOCALAPPDATA";
+#else
+        const char* phome_var_name = "HOME";
 #endif
-		if (!getenv(phome_var_name)) 
-		{
-			applog(LOG_ERR, "$%s not set", phome_var_name);
-			return 1;
-		}
-		if (!try_mkdir_chdir(getenv(phome_var_name)) )
-			return 1;
+        if (!getenv(phome_var_name)) {
+            applog(LOG_ERR, "$%s not set", phome_var_name);
+            return 1;
+        }
+        if (!try_mkdir_chdir(getenv(phome_var_name)) )
+            return 1;
 
 #if !defined(_WIN64) && !defined(_WIN32)
-		if (!try_mkdir_chdir(".cache") )
-		{
-			return 1;
-		}
+        if (!try_mkdir_chdir(".cache") ) {
+            return 1;
+        }
 #endif
 
-		if(!try_mkdir_chdir(cachedir_suffix))
-		{
-			return 1;
-		}
+        if(!try_mkdir_chdir(cachedir_suffix)) {
+            return 1;
+        }
 
-		if (getcwd(cachedir, sizeof(cachedir) - 22) == NULL) {
-			applog(LOG_ERR, "getcwd failed: %s", strerror(errno));
-			return 1;
-		}
-		snprintf(scratchpad_file, sizeof(scratchpad_file), "%s/scratchpad.bin", cachedir);
-		pscratchpad_local_cache = scratchpad_file;
-	}
+        if (getcwd(cachedir, sizeof(cachedir) - 22) == NULL) {
+            applog(LOG_ERR, "getcwd failed: %s", strerror(errno));
+            return 1;
+        }
+        snprintf(scratchpad_file, sizeof(scratchpad_file), "%s/scratchpad.bin", cachedir);
+        pscratchpad_local_cache = scratchpad_file;
+    }
 
-	applog(LOG_DEBUG, "wildkeccak scratchpad cache %s", pscratchpad_local_cache);
+    applog(LOG_DEBUG, "wildkeccak scratchpad cache %s", pscratchpad_local_cache);
 
-	applog(LOG_INFO, "Using JSON-RPC 2.0");
-	size_t sz = WILD_KECCAK_SCRATCHPAD_BUFFSIZE;
+    applog(LOG_INFO, "Using JSON-RPC 2.0");
+    size_t sz = WILD_KECCAK_SCRATCHPAD_BUFFSIZE;
 #if !defined(_WIN64) && !defined(_WIN32)
-	pscratchpad_buff = mmap(0, sz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS |
-		MAP_HUGETLB | MAP_POPULATE, 0, 0);
-	if(MAP_FAILED == pscratchpad_buff)      
-	{
-		applog(LOG_INFO, "hugetlb not available");
+    pscratchpad_buff = mmap(0, sz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS |
+                            MAP_HUGETLB | MAP_POPULATE, 0, 0);
+    if(MAP_FAILED == pscratchpad_buff) {
+        applog(LOG_INFO, "hugetlb not available");
 #endif
-		pscratchpad_buff = xmalloc(sz);
+        pscratchpad_buff = xmalloc(sz);
 #if !defined(_WIN64) && !defined(_WIN32)
-	} else {
-		applog(LOG_INFO, "using hugetlb");
-	}
-#endif        //try to load scratchpad from file 
-	if(!load_scratchpad_from_file(pscratchpad_local_cache))
-	{
-		if(!pscratchpad_url)
-		{
-			applog(LOG_ERR, "Scratchpad URL not set. Please specify correct scratchpad url by -k or --scratchpad option");
-			return 1;
-		}
-		if(!download_inital_scratchpad(pscratchpad_local_cache, pscratchpad_url))
-		{
-			applog(LOG_ERR, "Scratchpad not found and not downloaded. Please specify correct scratchpad url by -k or --scratchpad  option");
-			return 1;
-		}
-		if(!load_scratchpad_from_file(pscratchpad_local_cache))
-		{
-			applog(LOG_ERR, "Failed to load scratchpad data after downloading, probably broken scratchpad link, please restart miner with correct inital scratcpad link(-k or --scratchpad )");
-			unlink(pscratchpad_local_cache);
-			return 1;
-		}
-	}
+    } else {
+        applog(LOG_INFO, "using hugetlb");
+    }
+#endif
+    //try to load scratchpad from file
+    if (!load_scratchpad_from_file(pscratchpad_local_cache)) {
+        if (!pscratchpad_url) {
+            applog(LOG_ERR, "Scratchpad URL not set. Please specify correct scratchpad url by -k or --scratchpad option");
+            return 1;
+        }
+        if (!download_inital_scratchpad(pscratchpad_local_cache, pscratchpad_url)) {
+            applog(LOG_ERR, "Scratchpad not found and not downloaded. Please specify "
+                   "correct scratchpad url by -k or --scratchpad option");
+            return 1;
+        }
+        if (!load_scratchpad_from_file(pscratchpad_local_cache)) {
+            applog(LOG_ERR, "Failed to load scratchpad data after downloading, probably broken scratchpad "
+                   "link, please restart miner with correct inital scratcpad link(-k or --scratchpad )");
+            unlink(pscratchpad_local_cache);
+            return 1;
+        }
+    }
 
     if (!opt_benchmark && !rpc_url) {
         fprintf(stderr, "%s: no URL supplied\n", argv[0]);

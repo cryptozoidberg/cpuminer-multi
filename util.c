@@ -997,7 +997,7 @@ bool stratum_getscratchpad(struct stratum_ctx *sctx) {
 
     applog(LOG_DEBUG, "Getting full scratchpad parsed line");
 
-    ret = rpc2_getfullscratchpad_decode(val);  
+    ret = rpc2_getfullscratchpad_decode(val);
 
 out:
     free(s);
