@@ -577,11 +577,15 @@ bool addendum_decode(const json_t *addm)
         if(current_scratchpad_hi.height > hi.height -1)
         {
             //skip low scratchpad
-            applog(LOG_ERR, "addendum with hi.height=%lld skipped since current_scratchpad_hi.height=%lld", hi.height, current_scratchpad_hi.height);        
+            applog(LOG_ERR, "addendum with hi.height=%lld skipped "
+                   "since current_scratchpad_hi.height=%lld",
+                   hi.height, current_scratchpad_hi.height);
             return true;
         }
         //TODO: ADD SPLIT HANDLING HERE
-        applog(LOG_ERR, "JSON height in addendum-1 (%lld-1) mismatched with current_scratchpad_hi.height(%lld), reverting scratchpad and re-login", hi.height, current_scratchpad_hi.height);
+        applog(LOG_ERR, "JSON height in addendum-1 (%lld-1) mismatched with "
+               "current_scratchpad_hi.height(%lld), reverting scratchpad "
+               "and re-login", hi.height, current_scratchpad_hi.height);
         revert_scratchpad();
         //re-request job
         need_to_rerequest_job = true;
@@ -627,7 +631,7 @@ bool addendum_decode(const json_t *addm)
     current_scratchpad_hi = hi;
 
     if (!opt_quiet) {
-        applog(LOG_INFO, "ADDENDUM APPLIED: %lld --> %lld  %lld blocks added",
+        applog(LOG_INFO, "ADDENDUM APPLIED: %lld --> %lld  %3lld blocks added",
                old_height, current_scratchpad_hi.height, add_len/64);
     }
     return true;
@@ -868,7 +872,8 @@ bool rpc2_getfullscratchpad_decode(const json_t *val) {
         goto err_out;
     }
 
-    size_t len = hex2bin_len((unsigned char*)pscratchpad_buff, scratch_hex, WILD_KECCAK_SCRATCHPAD_BUFFSIZE);
+    size_t len = hex2bin_len((unsigned char*)pscratchpad_buff,
+                             scratch_hex, WILD_KECCAK_SCRATCHPAD_BUFFSIZE);
     if (!len)
     {
         applog(LOG_ERR, "JSON scratch_hex is not valid hex");
@@ -900,7 +905,8 @@ bool rpc2_getfullscratchpad_decode(const json_t *val) {
 
     return true;
 
-err_out: return false;
+err_out:
+    return false;
 }
 
 static void share_result(int result, struct work *work, const char *reason) {
@@ -949,7 +955,8 @@ static bool submit_upstream_work(CURL *curl, struct work *work) {
 
             noncestr = bin2hex(((const unsigned char*)work->data) + 1, 8);
             strcpy(last_found_nonce, noncestr);
-            wild_keccak_hash_dbl_use_global_scratch((uint8_t*)work->data, work->job_len, (uint8_t*)hash);                
+            wild_keccak_hash_dbl_use_global_scratch((uint8_t*)work->data,
+                                                    work->job_len, (uint8_t*)hash);
             hashhex = bin2hex(hash, 32);
             snprintf(s, JSON_BUF_LEN,
                 "{\"method\": \"submit\", \"params\": {\"id\": \"%s\", \"job_id\": \"%s\", \"nonce\": \"%s\", \"result\": \"%s\"}, \"id\":1}\r\n",
@@ -978,7 +985,7 @@ static bool submit_upstream_work(CURL *curl, struct work *work) {
         if(jsonrpc_2) {
             char *noncestr;
             char hash[32];
-			char *hashhex;
+            char *hashhex;
 
             noncestr = bin2hex(((const unsigned char*)work->data) + 1, 8);
             strcpy(last_found_nonce, noncestr);
@@ -1023,15 +1030,15 @@ static bool submit_upstream_work(CURL *curl, struct work *work) {
             res = json_object_get(val, "result");
             reason = json_object_get(val, "reject-reason");
             share_result(json_is_true(res), work,
-                reason ? json_string_value(reason) : NULL );
+                         reason ? json_string_value(reason) : NULL );
         }
-
         json_decref(val);
     }
 
     rc = true;
 
-out: free(str);
+out:
+    free(str);
     return rc;
 }
 
@@ -1100,17 +1107,11 @@ static bool rpc2_login(CURL *curl) {
     //    applog(LOG_DEBUG, "JSON value: %s", json_dumps(val, 0));
 
     rc = rpc2_login_decode(val);
-
     json_t *result = json_object_get(val, "result");
-
     if(!result) goto end;
 
-
-
     applog(LOG_INFO, "Using normal job parsing scenario");
-
     json_t *job = json_object_get(result, "job");
-
     if(!rpc2_job_decode(job, &g_work)) {
         goto end;
     }
@@ -1118,7 +1119,7 @@ static bool rpc2_login(CURL *curl) {
     if (opt_debug && rc) {
         timeval_subtract(&diff, &tv_end, &tv_start);
         applog(LOG_DEBUG, "DEBUG: authenticated in %d ms",
-            diff.tv_sec * 1000 + diff.tv_usec / 1000);
+               diff.tv_sec * 1000 + diff.tv_usec / 1000);
     }
 
     json_decref(val);
@@ -1126,9 +1127,6 @@ static bool rpc2_login(CURL *curl) {
 end:
     return rc;
 }
-
-
-
 
 static void workio_cmd_free(struct workio_cmd *wc) {
     if (!wc)
@@ -1163,7 +1161,7 @@ static bool workio_get_work(struct workio_cmd *wc, CURL *curl) {
 
         /* pause, then restart work-request loop */
         applog(LOG_ERR, "getwork failed, retry after %d seconds",
-            opt_fail_pause);
+               opt_fail_pause);
         sleep(opt_fail_pause);
     }
 
@@ -1232,8 +1230,6 @@ static void *workio_thread(void *userdata) {
         ok = workio_login(curl);
     }
 
-
-
     while (ok) {
         struct workio_cmd *wc;
 
@@ -1273,7 +1269,7 @@ static bool get_work(struct thr_info *thr, struct work *work) {
 
     if (opt_benchmark) {
         memset(work->data, 0x55, 76);
-        work->data[17] = swab32(time(NULL ));
+        work->data[17] = swab32(time(NULL));
         memset(work->data + 19, 0x00, 52);
         work->data[20] = 0x80000000;
         work->data[31] = 0x00000280;
@@ -1323,7 +1319,8 @@ static bool submit_work(struct thr_info *thr, const struct work *work_in) {
 
     return true;
 
-err_out: workio_cmd_free(wc);
+err_out:
+    workio_cmd_free(wc);
     return false;
 }
 
@@ -1467,8 +1464,8 @@ static void *miner_thread(void *userdata) {
             break;
     }
 
-out: tq_freeze(mythr->q);
-
+out:
+    tq_freeze(mythr->q);
     return NULL ;
 }
 
@@ -1539,7 +1536,7 @@ start:
         if (likely(val)) {
             if (!jsonrpc_2) {
                 soval = json_object_get(json_object_get(val, "result"),
-                    "submitold");
+                                        "submitold");
                 submit_old = soval ? json_is_true(soval) : false;
             }
             pthread_mutex_lock(&g_work_lock);
@@ -1606,8 +1603,6 @@ bool store_scratchpad_to_file(bool do_fsync)
     sf.current_hi = current_scratchpad_hi;
     sf.scratchpad_size = scratchpad_size;
 
-
-
     if ((fwrite(&sf, sizeof(sf), 1, fp) != 1) ||
         (fwrite(pscratchpad_buff, 8, scratchpad_size, fp) != scratchpad_size)) {
             applog(LOG_ERR, "failed to write file %s: %s", file_name_buff, strerror(errno));
@@ -1644,8 +1639,9 @@ bool store_scratchpad_to_file(bool do_fsync)
 /* TODO: repetitive error+log spam handling */
 bool load_scratchpad_from_file(const char *fname)
 {
-
+    FILE *fp;
     struct stat file_stat;
+
     if(stat(fname, &file_stat) < 0)    
     {
         applog(LOG_ERR, "fstat error from %s: %s", fname, strerror(errno));
@@ -1657,9 +1653,6 @@ bool load_scratchpad_from_file(const char *fname)
         return false;
     }
 
-
-    FILE *fp;
-
     fp = fopen(fname, "rb");
     if (fp == NULL) 
     {
@@ -1669,7 +1662,6 @@ bool load_scratchpad_from_file(const char *fname)
         return false;
     }
 
-
     struct scratchpad_file_header fh = {0};
     if ((fread(&fh, sizeof(fh), 1, fp) != 1))
     {
@@ -1677,7 +1669,6 @@ bool load_scratchpad_from_file(const char *fname)
         fclose(fp);
         return false;
     }
-
 
     if ((fh.scratchpad_size*8 > (WILD_KECCAK_SCRATCHPAD_BUFFSIZE)) ||(fh.scratchpad_size%4)) 
     {
@@ -1704,38 +1695,6 @@ bool load_scratchpad_from_file(const char *fname)
     return true;
 }
 
-
-bool dump_scratchpad_to_file_debug()
-{
-    FILE *fp;
-    char file_name_buff[1000] = {0};
-    snprintf(file_name_buff, sizeof(file_name_buff), "scratchpad_%" PRIu64 "_%s.scr",
-        current_scratchpad_hi.height, last_found_nonce);
-
-    /* do not bother rewriting if it exists already */
-
-
-    fp=fopen(file_name_buff, "w");
-    if(fp == NULL)
-    {
-        applog(LOG_INFO, "failed to open file %s: %s", file_name_buff, strerror(errno));
-        return false;
-    }
-    if (fwrite(pscratchpad_buff, 8, scratchpad_size, fp) != scratchpad_size) {
-        applog(LOG_ERR, "failed to write file %s: %s", file_name_buff, strerror(errno));
-        fclose(fp);
-        return false;
-    }
-    if (fclose(fp) == EOF) {
-        applog(LOG_ERR, "failed to write file %s: %s", file_name_buff, strerror(errno));
-        return false;
-    }
-
-    fclose(fp);
-    return true;
-}
-
-
 static bool try_mkdir_chdir(const char *dirn)
 {
     if (chdir(dirn) == -1) {
@@ -1760,7 +1719,6 @@ static bool try_mkdir_chdir(const char *dirn)
     return true;
 }
 
-
 static bool stratum_handle_response(char *buf) {
     json_t *val, *err_val, *res_val, *id_val;
     json_error_t err;
@@ -1780,8 +1738,7 @@ static bool stratum_handle_response(char *buf) {
     if (!id_val || json_is_null(id_val) /*|| !res_val*/)
         goto out;
 
-    if(jsonrpc_2) 
-    {
+    if (jsonrpc_2) {
         json_t *status = NULL;
         if(res_val) 
             status = json_object_get(res_val, "status");
@@ -1792,24 +1749,19 @@ static bool stratum_handle_response(char *buf) {
             valid = json_is_null(err_val);
         }
 
-        if(err_val && !json_is_null(err_val) )
-        {
+        if (err_val && !json_is_null(err_val)) {
             const char* perr_msg = get_json_string_param(err_val, "message");
-            if(perr_msg && !strcmp(perr_msg, "Unauthenticated"))
-            {
+            if(perr_msg && !strcmp(perr_msg, "Unauthenticated")) {
                 applog(LOG_ERR, "Response returned \"Unauthenticated\", need to relogin");
                 err_val = json_object_get(err_val, "message");
                 valid = false;
                 //init reconnect
                 strcpy(rpc2_id, "");
-            }
-            else if(perr_msg && !strcmp(perr_msg, "Low difficulty share")) 
-            {
+            } else if (perr_msg && !strcmp(perr_msg, "Low difficulty share")) {
                 //applog(LOG_ERR, "Dump scratchpad file");
                 //dump_scrstchpad_to_file();
-              need_to_rerequest_job = true;
-            }else
-            {
+                need_to_rerequest_job = true;
+            } else {
               need_to_rerequest_job = true;
             }
             
@@ -1820,14 +1772,16 @@ static bool stratum_handle_response(char *buf) {
         valid = res_val && json_is_true(res_val);
     }
 
-    share_result(valid, NULL,
-        err_val ? (jsonrpc_2 ? json_string_value(err_val) : json_string_value(json_array_get(err_val, 1))) : NULL );
+    share_result(valid, NULL, err_val
+                 ? (jsonrpc_2 ? json_string_value(err_val)
+                 : json_string_value(json_array_get(err_val, 1))) : NULL );
 
     ret = true;
-out: if (val)
+out:
+    if (val)
          json_decref(val);
 
-     return ret;
+    return ret;
 }
 
 static void *stratum_thread(void *userdata) {
@@ -1940,7 +1894,8 @@ static void *stratum_thread(void *userdata) {
         free(s);
     }
 
-out: return NULL ;
+out:
+    return NULL;
 }
 
 static void show_version_and_exit(void) {
@@ -2193,10 +2148,11 @@ static void parse_config(void) {
             char *s = xstrdup(json_string_value(val));
             parse_arg(options[i].val, s);
             free(s);
-        } else if (!options[i].has_arg && json_is_true(val))
+        } else if (!options[i].has_arg && json_is_true(val)) {
             parse_arg(options[i].val, "");
-        else
+        } else {
             applog(LOG_ERR, "JSON option %s invalid", options[i].name);
+        }
     }
 }
 
