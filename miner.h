@@ -272,7 +272,8 @@ extern struct scratchpad_hi current_scratchpad_hi;
 #define JSON_RPC_QUIET_404	(1 << 1)
 #define JSON_RPC_IGNOREERR  (1 << 2)
 
-extern void applog(int prio, const char *fmt, ...);
+extern void applog(int prio, const char *fmt, ...)
+            __attribute__ ((format (printf, 2, 3)));
 extern json_t *json_rpc_call(CURL *curl, const char *url, const char *userpass,
                              const char *rpc_req, int *curl_err, int flags);
 extern char *bin2hex(const unsigned char *p, size_t len);

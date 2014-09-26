@@ -430,7 +430,7 @@ bool parse_height_info(const json_t *hi_section, struct scratchpad_hi* phi)
     size_t len = hex2bin_len(prevhash, block_id, 32);
     if(len != 32)
     {
-        applog(LOG_ERR, "JSON inval hi: block_id wrong len %d", len);
+        applog(LOG_ERR, "JSON inval hi: block_id wrong len %zu", len);
         goto err_out;
     }
 
@@ -577,14 +577,14 @@ bool addendum_decode(const json_t *addm)
         if(current_scratchpad_hi.height > hi.height -1)
         {
             //skip low scratchpad
-            applog(LOG_ERR, "addendum with hi.height=%lld skipped "
-                   "since current_scratchpad_hi.height=%lld",
+            applog(LOG_ERR, "addendum with hi.height=%" PRIu64 " skipped "
+                   "since current_scratchpad_hi.height=%" PRIu64,
                    hi.height, current_scratchpad_hi.height);
             return true;
         }
         //TODO: ADD SPLIT HANDLING HERE
-        applog(LOG_ERR, "JSON height in addendum-1 (%lld-1) mismatched with "
-               "current_scratchpad_hi.height(%lld), reverting scratchpad "
+        applog(LOG_ERR, "JSON height in addendum-1 (%" PRIu64 "-1) mismatched with "
+               "current_scratchpad_hi.height(%" PRIu64 "), reverting scratchpad "
                "and re-login", hi.height, current_scratchpad_hi.height);
         revert_scratchpad();
         //re-request job
@@ -631,7 +631,7 @@ bool addendum_decode(const json_t *addm)
     current_scratchpad_hi = hi;
 
     if (!opt_quiet) {
-        applog(LOG_INFO, "ADDENDUM APPLIED: %lld --> %lld  %3lld blocks added",
+        applog(LOG_INFO, "ADDENDUM APPLIED: %" PRIu64 " --> %" PRIu64 "  %3" PRIu64 " blocks added",
                old_height, current_scratchpad_hi.height, add_len/64);
     }
     return true;
@@ -882,7 +882,7 @@ bool rpc2_getfullscratchpad_decode(const json_t *val) {
 
     if (len%8 || len%32)
     {
-        applog(LOG_ERR, "JSON scratch_hex is not valid size=%d bytes", len);
+        applog(LOG_ERR, "JSON scratch_hex is not valid size=%zu bytes", len);
         goto err_out;
     }
 
@@ -900,7 +900,7 @@ bool rpc2_getfullscratchpad_decode(const json_t *val) {
         goto err_out;
     }
 
-    applog(LOG_INFO, "Fetched scratchpad size %d bytes", len);
+    applog(LOG_INFO, "Fetched scratchpad size %zu bytes", len);
     scratchpad_size = len/8;
 
     return true;
@@ -1074,8 +1074,8 @@ static bool get_upstream_work(CURL *curl, struct work *work) {
 
     if (opt_debug && rc) {
         timeval_subtract(&diff, &tv_end, &tv_start);
-        applog(LOG_DEBUG, "DEBUG: got new work in %d ms",
-            diff.tv_sec * 1000 + diff.tv_usec / 1000);
+        applog(LOG_DEBUG, "DEBUG: got new work in %ld ms",
+               diff.tv_sec * 1000 + diff.tv_usec / 1000);
     }
 
     json_decref(val);
@@ -1118,7 +1118,7 @@ static bool rpc2_login(CURL *curl) {
 
     if (opt_debug && rc) {
         timeval_subtract(&diff, &tv_end, &tv_start);
-        applog(LOG_DEBUG, "DEBUG: authenticated in %d ms",
+        applog(LOG_DEBUG, "DEBUG: authenticated in %ld ms",
                diff.tv_sec * 1000 + diff.tv_usec / 1000);
     }
 
@@ -1673,7 +1673,7 @@ bool load_scratchpad_from_file(const char *fname)
     if ((fh.scratchpad_size*8 > (WILD_KECCAK_SCRATCHPAD_BUFFSIZE)) ||(fh.scratchpad_size%4)) 
     {
         applog(LOG_ERR, "file %s size invalid (%" PRIu64 "), max=%zu",
-            fname, fh.scratchpad_size*8, WILD_KECCAK_SCRATCHPAD_BUFFSIZE);
+               fname, fh.scratchpad_size*8, (size_t)WILD_KECCAK_SCRATCHPAD_BUFFSIZE);
         fclose(fp);
         return false;
     }
