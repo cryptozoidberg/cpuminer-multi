@@ -33,7 +33,11 @@ static inline struct reciprocal_value64 reciprocal_value64(u64 d)
 	int l;
 
 	BUILD_BUG_ON((sizeof(unsigned long long)) != (sizeof(u64)));
-	l = ((sizeof(unsigned long long)*8)) - __builtin_clzll(d - 1);
+	if (unlikely(d == 1)) {
+		l = 0;
+	} else {
+		l = ((sizeof(unsigned long long)*8)) - __builtin_clzll(d - 1);
+	}
 	m = (((unsigned __int128)1 << 64) * ((1ULL << l) - d));
         m /= d;
 	++m;
