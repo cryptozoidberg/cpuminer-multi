@@ -9,6 +9,7 @@ ID
 tags
 *~
 .*.swp
+gmon.out
 
 Makefile
 Makefile.in
