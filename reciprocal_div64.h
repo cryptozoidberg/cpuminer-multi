@@ -29,12 +29,12 @@ struct reciprocal_value64 {
 static inline struct reciprocal_value64 reciprocal_value64(u64 d)
 {
 	struct reciprocal_value64 R;
-	__uint128_t m;
+	unsigned __int128 m;
 	int l;
 
 	BUILD_BUG_ON((sizeof(unsigned long long)) != (sizeof(u64)));
 	l = ((sizeof(unsigned long long)*8)) - __builtin_clzll(d - 1);
-	m = (((__uint128_t)1 << 64) * ((1ULL << l) - d));
+	m = (((unsigned __int128)1 << 64) * ((1ULL << l) - d));
         m /= d;
 	++m;
 	R.m = (u64)m;
@@ -46,7 +46,7 @@ static inline struct reciprocal_value64 reciprocal_value64(u64 d)
 
 static inline u64 reciprocal_divide64(u64 a, struct reciprocal_value64 R)
 {
-	u64 t = (u64)(((__uint128_t)a * R.m) >> 64);
+	u64 t = (u64)(((unsigned __int128)a * R.m) >> 64);
 	return (t + ((a - t) >> R.sh1)) >> R.sh2;
 }
 
