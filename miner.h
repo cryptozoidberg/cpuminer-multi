@@ -10,16 +10,6 @@
 #include <jansson.h>
 #include <curl/curl.h>
 
-#ifndef  MAP_ANONYMOUS
-#define MAP_ANONYMOUS MAP_ANON
-#endif
-#ifndef MAP_HUGETLB
-#define MAP_HUGETLB 0
-#endif
-#ifndef MAP_POPULATE 
-#define MAP_POPULATE 0 
-#endif 
-
 #ifdef STDC_HEADERS
 # include <stdlib.h>
 # include <stddef.h>
