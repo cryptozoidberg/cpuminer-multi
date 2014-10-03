@@ -18,6 +18,10 @@
 #  include <stdlib.h>
 # endif
 #endif
+#ifdef HAVE_SYS_MMAN_H
+# include <sys/mman.h>
+#endif
+
 #ifdef HAVE_ALLOCA_H
 # include <alloca.h>
 #elif !defined alloca
@@ -78,6 +82,14 @@ enum {
 #else
 #define bswap_32(x) ((((x) << 24) & 0xff000000u) | (((x) << 8) & 0x00ff0000u) \
     | (((x) >> 8) & 0x0000ff00u) | (((x) >> 24) & 0x000000ffu))
+#endif
+
+/* FreeBSD uses superpages if vm.pmap.pg_ps_enabled=1 (default on on x86_64 FreeBSD 10 */
+#if defined(__linux__)
+#  define MINERD_WANT_MMAP 1
+#  define MINERD_MMAP_FLAGS (MAP_HUGETLB | MAP_POPULATE)
+#else
+#  define MINERD_WANT_MMAP 0
 #endif
 
 static inline uint32_t swab32(uint32_t v)
