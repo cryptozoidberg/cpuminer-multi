@@ -80,6 +80,7 @@ make
    * The miner can take advantage of SSE2 and AVX2 instructions, but only if both the CPU and the operating system support them.
    * There is no runtime check for the features, so minerd compiled on CPU with
    * AVX2 support causes Invalid opcode trap when run on CPU without AVX2 support (patches accepted).
+   * If compiler version changes, do "make clean", because LTO binary format is not necessarily compatible between different compiler versions.
    * If you get errors relating to __LLVMgold.so__ when compiling with clang, try as root:
 ```sh
 alternatives --set ld /usr/bin/ld.gold
